@@ -213,6 +213,7 @@ if __name__ == '__main__':
         c.save(CACHED_KEYFILE)
 
     fname = os.path.basename(__file__)
+    print fname
 
     # test
     print 'account_info:', c.account_info()

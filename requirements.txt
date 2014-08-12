@@ -1,0 +1,3 @@
+json
+requests
+git+git://github.com/maxint/requests-oauthlib
