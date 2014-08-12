@@ -227,7 +227,7 @@ if __name__ == '__main__':
     print 'copy:', c.copy('_tmp2_', '_tmp3_')
     print 'delete1:', c.delete('_tmp2_')
     print 'delete2:', c.delete('_tmp3_')
-    print 'download:', c.download(fname, '_tmp.py')
+    print 'download:', c.download(fname, '.tmp.py')
     print 'thumbnail:', c.thumbnail(128, 128, 'Work/resume/zjg_icon.jpg')
     print 'document_view:', c.document_view('txt', 'android', fname)
     print 'Done.'
