@@ -1,13 +1,15 @@
 #! /usr/bin/env python
+# coding: utf-8
 # Copyright (C) 2014 maxint <NOT_SPAM_lnychina@gmail.com>
 # Distributed under terms of the MIT license.
 
 """
-
+Kuaipan Python API:
+    http://www.kuaipan.cn/developers/document.htm
 """
 
-import sys
 # Call ipython when raising exception
+import sys
 from IPython.core import ultratb
 sys.excepthook = ultratb.FormattedTB(mode='Verbose',
                                      color_scheme='Linux',
@@ -17,6 +19,7 @@ sys.path.append('/home/maxint/code/requests-oauthlib')
 
 from requests_oauthlib import OAuth1Session
 import json
+import os
 
 
 API_URL = 'https://openapi.kuaipan.cn/1/'
@@ -159,7 +162,6 @@ class Kuaipan():
         url0 = 'http://api-content.dfs.kuaipan.cn/1/fileops/upload_locate'
         r = self.oauth.get(url0, params={'source_ip': source_ip})
         url = json.loads(r.text).get('url')
-        import os
         url = os.path.join(url, '1/fileops/upload_file')
         return self.oauth.post(url, params={
             'root': self.root,
@@ -208,7 +210,6 @@ if __name__ == '__main__':
         c.authorise(authoriseCallback)
         c.save(CACHED_KEYFILE)
 
-    import os
     fname = os.path.basename(__file__)
     print fname
 
@@ -227,5 +228,5 @@ if __name__ == '__main__':
     print 'delete2:', c.delete('_tmp3_')
     print 'download:', c.download(fname, '_tmp.py')
     print 'thumbnail:', c.thumbnail(128, 128, 'Work/resume/zjg_icon.jpg')
-    print 'document_view:', c.document_view('txt', 'android',fname)
+    print 'document_view:', c.document_view('txt', 'android', fname)
     print 'Done.'
