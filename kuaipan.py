@@ -16,11 +16,14 @@ from requests_oauthlib import OAuth1Session
 import json
 import os
 
-
-API_URL = 'https://openapi.kuaipan.cn/1/'
-REQUEST_TOKEN_URL = 'https://openapi.kuaipan.cn/open/requestToken'
-AUTHORISE_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
-ACCESS_TOKEN_URL = 'https://openapi.kuaipan.cn/open/accessToken'
+API_VERSION = 1
+API_HOST = 'https://openapi.kuaipan.cn/'
+CONV_HOST = 'http://conv.kuaipan.cn/'
+CONTENT_HOST = 'http://api-content.dfs.kuaipan.cn/'
+API_URL = API_HOST + str(API_VERSION) + '/'
+CONV_URL = CONV_HOST + str(API_VERSION) + '/'
+CONTENT_URL = CONTENT_HOST + str(API_VERSION) + '/'
+AUTH_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
 
 
 class Kuaipan():
@@ -36,10 +39,10 @@ class Kuaipan():
 
     def authorise(self, callback=None):
         # requestToken
-        self.oauth.fetch_request_token(REQUEST_TOKEN_URL)
+        self.oauth.fetch_request_token(API_HOST + 'open/requestToken')
 
         # authorize
-        authorization_url = self.oauth.authorization_url(AUTHORISE_URL)
+        authorization_url = self.oauth.authorization_url(AUTH_URL)
         if callback:
             verifier = callback(authorization_url)
         else:
@@ -47,7 +50,7 @@ class Kuaipan():
             verifier = raw_input('Paste the verifier here: ')
 
         # accessToken
-        self.oauth.fetch_access_token(ACCESS_TOKEN_URL, verifier)
+        self.oauth.fetch_access_token(API_HOST + 'open/accessToken', verifier)
 
     def save(self, filename):
         with open(filename, 'wt') as f:
@@ -127,7 +130,7 @@ class Kuaipan():
         '''
         TYPE_IMG = ('gif', 'png', 'jpg', 'bmp', 'jpeg', 'jpe')
         '''
-        url = 'http://conv.kuaipan.cn/1/fileops/thumbnail'
+        url = CONV_URL + 'fileops/thumbnail'
         return self.oauth.get(url, params={
             'root': self.root,
             'path': path,
@@ -144,7 +147,7 @@ class Kuaipan():
         view = {'normal', 'android', 'iPad', 'iphone'}
         zip = {0, 1}
         '''
-        url = 'http://conv.kuaipan.cn/1/fileops/documentView'
+        url = CONV_URL + 'fileops/documentView'
         return self.oauth.get(url, params={
             'root': self.root,
             'path': path,
@@ -154,7 +157,7 @@ class Kuaipan():
         })
 
     def upload(self, local_path, path, overwrite=True, source_ip=None):
-        url0 = 'http://api-content.dfs.kuaipan.cn/1/fileops/upload_locate'
+        url0 = CONTENT_URL + 'fileops/upload_locate'
         r = self.oauth.get(url0, params={'source_ip': source_ip})
         url = json.loads(r.text).get('url')
         url = os.path.join(url, '1/fileops/upload_file')
@@ -165,7 +168,7 @@ class Kuaipan():
         }, files=dict(file=open(local_path, 'rb').read()))
 
     def download(self, path, local_path, rev=None):
-        url = 'http://api-content.dfs.kuaipan.cn/1/fileops/download_file'
+        url = CONTENT_URL + 'fileops/download_file'
         #import ipdb; ipdb.set_trace()
         r = self.oauth.get(url, params={
             'root': self.root,
