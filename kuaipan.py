@@ -10,19 +10,17 @@ Kuaipan Python API:
 """
 
 # Add custom module
-#sys.path.append('/home/maxint/code/requests-oauthlib')
+#import sys; sys.path.insert(0, '/home/maxint/code/requests-oauthlib')
 
 from requests_oauthlib import OAuth1Session
 import json
 import os
+from urllib import quote
 
 API_VERSION = 1
 API_HOST = 'https://openapi.kuaipan.cn/'
 CONV_HOST = 'http://conv.kuaipan.cn/'
 CONTENT_HOST = 'http://api-content.dfs.kuaipan.cn/'
-API_URL = API_HOST + str(API_VERSION) + '/'
-CONV_URL = CONV_HOST + str(API_VERSION) + '/'
-CONTENT_URL = CONTENT_HOST + str(API_VERSION) + '/'
 AUTH_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
 
 
@@ -63,59 +61,76 @@ class Kuaipan():
                 'root': self.root
             }))
 
+    def build_url(self, url, api='API', path=None):
+        HOSTS = {
+            'API': API_HOST,
+            'CONV': CONV_HOST,
+            'CONTENT': CONTENT_HOST,
+        }
+        if path:
+            if isinstance(path, unicode):
+                path = path.encode('utf-8')
+            url = os.path.join(url, self.root, quote(path.strip('/')))
+        if api in HOSTS:
+            return os.path.join(HOSTS.get(api, ''), str(API_VERSION), url)
+        else:
+            return url
+
+    def get(self, url, api='API', path=None, **kargs):
+        url = self.build_url(url, api, path)
+        r = self.oauth.get(url, **kargs)
+        if r.status_code == 200:
+            return r
+        return r
+        #else:
+            #raise Exception()
+
     def account_info(self):
-        return self.oauth.get(API_URL + 'account_info')
+        return self.get('account_info').json()
 
     def metadata(self, path, recurse=None, file_limit=None,
                  page=None, page_size=None,
                  filter_ext=None, sort_by=None):
-        url = API_URL + 'metadata/{}/{}'.format(self.root, path)
-        return self.oauth.get(url, params={
+        return self.get('metadata', path=path, params={
             'list': recurse,
             'file_limit': file_limit,
             'page': page,
             'page_size': page_size,
             'filter_ext': filter_ext,
             'sort_by': sort_by,
-        })
+        }).json()
 
     def shares(self, path, name=None, access_code=None):
-        url = API_URL + 'shares/{}/{}'.format(self.root, path)
-        return self.oauth.get(url, params={
+        return self.get('shares', path=path, params={
             'name': name,
             'access_code': access_code,
-        })
+        }).json()
 
     def history(self, path):
-        url = API_URL + 'history/{}/{}'.format(self.root, path)
-        return self.oauth.get(url)
+        return self.get('history', path=path).json()
 
     def mkdir(self, path):
-        url = API_URL + 'fileops/create_folder'
-        return self.oauth.get(url, params={
+        return self.get('fileops/create_folder', params={
             'root': self.root,
             'path': path,
-        })
+        }).json()
 
     def delete(self, path, to_recycle=None):
-        url = API_URL + 'fileops/delete'
-        return self.oauth.get(url, params={
+        return self.get('fileops/delete', params={
             'root': self.root,
             'path': path,
             'to_recycle': to_recycle,
         })
 
     def move(self, from_path, to_path):
-        url = API_URL + 'fileops/move'
-        return self.oauth.get(url, params={
+        return self.get('fileops/move', params={
             'root': self.root,
             'from_path': from_path,
             'to_path': to_path,
         })
 
     def copy(self, from_path, to_path, from_copy_ref=None):
-        url = API_URL + 'fileops/copy'
-        return self.oauth.get(url, params={
+        return self.get('fileops/copy', params={
             'root': self.root,
             'from_path': from_path,
             'to_path': to_path,
@@ -123,15 +138,39 @@ class Kuaipan():
         })
 
     def copy_ref(self, path):
-        url = API_URL + 'copy_ref/{}/{}'.format(self.root, path)
-        return self.oauth.get(url)
+        return self.get('copy_ref', path=path).json()
+
+    def upload(self, path, data, overwrite=True, source_ip=None):
+        host = self.get('fileops/upload_locate', api='CONTENT', params={
+            'source_ip': source_ip
+        }).json().get('url')
+        url = os.path.join(host, str(API_VERSION), 'fileops/upload_file')
+        return self.oauth.post(url, params={
+            'root': self.root,
+            'path': path,
+            'overwrite': overwrite,
+        }, files=dict(file=data)).json()
+
+    def download(self, path, rev=None):
+        """
+        Download file and return requests.Response
+
+        if r.status_code == 200:
+            with open(local_path, 'wb') as f:
+                for chunk in r.iter_content(1024):
+                    f.write(chunk)
+        """
+        return self.get('fileops/download_file', api='CONTENT', params={
+            'root': self.root,
+            'path': path,
+            'rev': rev,
+        }, stream=True)
 
     def thumbnail(self, width, height, path):
         '''
         TYPE_IMG = ('gif', 'png', 'jpg', 'bmp', 'jpeg', 'jpe')
         '''
-        url = CONV_URL + 'fileops/thumbnail'
-        return self.oauth.get(url, params={
+        return self.get('fileops/thumbnail', api='CONV', params={
             'root': self.root,
             'path': path,
             'width': width,
@@ -147,39 +186,13 @@ class Kuaipan():
         view = {'normal', 'android', 'iPad', 'iphone'}
         zip = {0, 1}
         '''
-        url = CONV_URL + 'fileops/documentView'
-        return self.oauth.get(url, params={
+        return self.get('fileops/documentView', api='CONV', params={
             'root': self.root,
             'path': path,
             'type': doctype,
             'view': view,
             'zip': 1 if iszip else 0,
         })
-
-    def upload(self, local_path, path, overwrite=True, source_ip=None):
-        url0 = CONTENT_URL + 'fileops/upload_locate'
-        r = self.oauth.get(url0, params={'source_ip': source_ip})
-        url = json.loads(r.text).get('url')
-        url = os.path.join(url, '1/fileops/upload_file')
-        return self.oauth.post(url, params={
-            'root': self.root,
-            'path': path,
-            'overwrite': overwrite,
-        }, files=dict(file=open(local_path, 'rb').read()))
-
-    def download(self, path, local_path, rev=None):
-        url = CONTENT_URL + 'fileops/download_file'
-        #import ipdb; ipdb.set_trace()
-        r = self.oauth.get(url, params={
-            'root': self.root,
-            'path': path,
-            'rev': rev,
-        }, stream=True)
-        if r.status_code == 200:
-            with open(local_path, 'wb') as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
-        return r
 
 
 def load(filename):
@@ -218,19 +231,19 @@ if __name__ == '__main__':
     fname = os.path.basename(__file__)
 
     # test
-    print 'account_info:', c.account_info()
-    print 'metadata:', c.metadata('')
-    print 'upload:', c.upload(__file__, fname)
-    print 'history:', c.history(fname)  # history not existed
-    print 'shares1:', c.shares(fname, 'test', 'fasdfasdla').text
-    print 'shares2', c.shares(fname)
-    print 'copy_ref:', c.copy_ref(fname)
-    print 'mkdir:', c.mkdir('_tmp_')
-    print 'move:', c.move('_tmp_', '_tmp2_')
-    print 'copy:', c.copy('_tmp2_', '_tmp3_')
-    print 'delete1:', c.delete('_tmp2_')
-    print 'delete2:', c.delete('_tmp3_')
-    print 'download:', c.download(fname, '.tmp.py')
-    print 'thumbnail:', c.thumbnail(128, 128, 'Work/resume/zjg_icon.jpg')
-    print 'document_view:', c.document_view('txt', 'android', fname)
+    print '= account_info:', c.account_info()
+    print '= metadata:', c.metadata('/')
+    print '= upload:', c.upload(fname, open(__file__, 'rb'))
+    print '= history:', c.history(fname)  # history not existed
+    print '= shares1', c.shares(fname)
+    print '= shares2:', c.shares(fname, 'test', 'fasdfasdla')
+    print '= mkdir:', c.mkdir('_tmp_')
+    print '= move:', c.move('_tmp_', '_tmp2_')
+    print '= copy:', c.copy('_tmp2_', '_tmp3_')
+    print '= delete1:', c.delete('_tmp2_')
+    print '= delete2:', c.delete('_tmp3_')
+    print '= copy_ref:', c.copy_ref(fname)
+    print '= download:', c.download(fname)
+    print '= thumbnail:', c.thumbnail(128, 128, 'Work/resume/zjg_icon.jpg')
+    print '= document_view:', c.document_view('txt', 'android', fname)
     print 'Done.'
