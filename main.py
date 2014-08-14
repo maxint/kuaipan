@@ -7,7 +7,9 @@
 # Distributed under terms of the MIT license.
 
 """
+Fuse file system for kuaipan.cn
 
+Code inspired from https://github.com/wusuopu/kuaipan-linux
 """
 import kuaipan
 import fuse
