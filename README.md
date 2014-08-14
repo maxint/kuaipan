@@ -1,7 +1,10 @@
 Introduction
 ------------
 
-Python API for kuaipan.cn
+Python API and fuse file system for kuaipan.cn
+
+- kuaipan.py - python API for kuaipan.cn
+- main.py - Fuse file system for kuaipan.cn
 
 
 Requirements
@@ -15,7 +18,4 @@ Requirements
 Install
 -------
 
-    pip install json
-    pip install requests
-    pip install git+git://github.com/maxint/requests-oauthlib
-    pip install git+git://github.com/maxint/kuaipan
+    pip install -r requirements.txt
