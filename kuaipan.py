@@ -234,6 +234,8 @@ if __name__ == '__main__':
     print '= account_info:', c.account_info()
     print '= metadata:', c.metadata('/')
     print '= upload:', c.upload(fname, open(__file__, 'rb'))
+    print '= upload:', c.upload('tmp.txt', 'hi')
+    print '= metadata:', c.metadata(fname)
     print '= history:', c.history(fname)  # history not existed
     print '= shares1', c.shares(fname)
     print '= shares2:', c.shares(fname, 'test', 'fasdfasdla')
