@@ -19,3 +19,10 @@ Install
 -------
 
     pip install -r requirements.txt
+
+Usage
+-----
+
+Mount yout kuaipan to given mount directory:
+
+    main.py <mount point>
