@@ -40,10 +40,95 @@ def get_time(time_str):
     return time.mktime(time.strptime(time_str, "%Y-%m-%d %H:%M:%S"))
 
 
+def create_st(meta):
+    if meta.get('path') == '/':
+        st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
+        st['st_ctime'] = st['st_mtime'] = st['st_atime'] = time.time()
+        return st
+    if meta['type'] == 'folder':
+        st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
+    else:
+        st = dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1,
+                  st_size=meta['size'])
+    st['st_ctime'] = get_time(meta['create_time'])
+    st['st_mtime'] = st['st_atime'] = get_time(meta['modify_time'])
+    return st
+
+
+class TreeCache():
+    def __init__(self, kp):
+        self.kp = kp
+        self.tree = dict()
+        self.build('/', self.tree)
+
+    def get_metadata(self, path):
+        meta = self.kp.metadata(path)
+        if meta and 'path' in meta:
+            return meta
+
+    def build(self, path, node):
+        meta = self.get_metadata(path)
+        if meta is None:
+            return
+
+        node['st'] = create_st(meta)
+        if meta.get('path') == '/' or meta['type'] == 'folder':
+            node['type'] = 'folder'
+            files = meta.get('files', [])
+            if 'dirs' not in node:
+                node['dirs'] = [x['name'] for x in files] + ['.', '..']
+            if 'files' not in node:
+                fnodes = dict()
+                for x in files:
+                    fnodes[x['name']] = dict(st=create_st(x),
+                                             type=x['type'])
+                node['files'] = fnodes
+        else:
+            node['type'] = 'file'
+
+        return node
+
+    def getnode(self, path, dirs=False):
+        if path == '/':
+            return self.tree
+
+        names = path.strip('/').split('/')
+        node = self.tree
+        cur_dir = '/'
+        for name in names:
+            if node.get('type') != 'folder':
+                return
+
+            if 'files' not in node:
+                if self.build(cur_dir, node) is None:
+                    return
+            node = node.get('files').get(name)
+            if node is None:
+                return
+            cur_dir += name + '/'
+
+        #if dirs:
+            #print path; import ipdb; ipdb.set_trace()
+        if node.get('type') == 'folder' and 'dirs' not in node and dirs:
+            self.build(path, node)
+        return node
+
+    def getattr(self, path):
+        node = self.getnode(path, False)
+        if node:
+            return node['st']
+
+    def readdir(self, path):
+        node = self.getnode(path, True)
+        return node['dirs']
+
+
 class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     def __init__(self, kp):
         self.kp = kp
         self.now = time.time()
+        self.tree = TreeCache(kp)
+        self.read_cache = dict()
 
     def get_metadata(self, path):
         meta = self.kp.metadata(path)
@@ -58,29 +143,16 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
             st['st_ctime'] = st['st_mtime'] = st['st_atime'] = self.now
             return st
 
-        meta = self.get_metadata(path)
-        if not meta:
+        st = self.tree.getattr(path)
+        if not st:
             log.debug("getattr: %s not exists!", path)
             raise fuse.FuseOSError(errno.ENOENT)
-
-        if meta['type'] == 'folder':
-            st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
-        else:
-            st = dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1,
-                      st_size=meta['size'])
-        st['st_ctime'] = get_time(meta['create_time'])
-        st['st_mtime'] = st['st_atime'] = get_time(meta['modify_time'])
         return st
 
     #文件列表
     def readdir(self, path, fh):
         log.debug("readdir: %s", path)
-        meta = self.get_metadata(path)
-        if not meta:
-            return ['.', '..']
-        else:
-            dlist = meta.get('files', [])
-            return [x['name'] for x in dlist] + ['.', '..']
+        return self.tree.readdir(path)
 
     #重命名/移动文件
     def rename(self, old, new):
@@ -106,7 +178,37 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     #读文件
     def read(self, path, size, offset, fh):
         log.debug("read: %s, size: %d, offset: %d", path, size, offset)
-        return self.kp.download(path).raw.read(size)
+        if not path in self.read_cache:
+            class ContentCache():
+                def __init__(self, r, size):
+                    self.csize = size
+                    self.gen = r.iter_content(size)
+                    self.buf = ''
+                    self.bufsz = 0
+                    self.eof = False
+
+                def align_count(self, size):
+                    return (size + self.csize - 1) / self.csize
+
+                def read(self, size, offset):
+                    total = size + offset
+                    if self.bufsz < total and not self.eof:
+                        count = self.align_count(total - self.bufsz)
+                        print count
+                        try:
+                            for i in range(count):
+                                self.buf += self.gen.next()
+                        except (StopIteration, ValueError):
+                            self.eof = True
+                        self.bufsz = len(self.buf)
+                    fsize = min(total, self.bufsz)
+                    return self.buf[offset:fsize]
+
+            it = ContentCache(self.kp.download(path), 4096)
+            self.read_cache[path] = it
+        else:
+            it = self.read_cache[path]
+        return it.read(size, offset)
 
     #写文件
     def write(self, path, data, offset, fh):
@@ -134,7 +236,7 @@ def echo_msg():
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        mount_point = 'mnt'
+        mount_point = 'Kuaipan'
         #print("Usage: %s <point>" % sys.argv[0])
         #exit(1)
     else:
