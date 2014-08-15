@@ -126,23 +126,12 @@ class TreeCache():
 class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     def __init__(self, kp):
         self.kp = kp
-        self.now = time.time()
         self.tree = TreeCache(kp)
         self.read_cache = dict()
-
-    def get_metadata(self, path):
-        meta = self.kp.metadata(path)
-        if meta and 'path' in meta:
-            return meta
 
     #文件属性
     def getattr(self, path, fh=None):
         log.debug("getattr: %s", path)
-        if path == '/':
-            st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
-            st['st_ctime'] = st['st_mtime'] = st['st_atime'] = self.now
-            return st
-
         st = self.tree.getattr(path)
         if not st:
             log.debug("getattr: %s not exists!", path)
@@ -180,31 +169,26 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         log.debug("read: %s, size: %d, offset: %d", path, size, offset)
         if not path in self.read_cache:
             class ContentCache():
-                def __init__(self, r, size):
-                    self.csize = size
-                    self.gen = r.iter_content(size)
-                    self.buf = ''
+                def __init__(self, r, tsize):
+                    self.raw = r.raw
+                    self.buf = bytes()
                     self.bufsz = 0
                     self.eof = False
-
-                def align_count(self, size):
-                    return (size + self.csize - 1) / self.csize
+                    self.tsize = tsize
 
                 def read(self, size, offset):
                     total = size + offset
                     if self.bufsz < total and not self.eof:
-                        count = self.align_count(total - self.bufsz)
-                        print count
                         try:
-                            for i in range(count):
-                                self.buf += self.gen.next()
+                            self.buf += self.raw.read(total - self.bufsz)
                         except (StopIteration, ValueError):
                             self.eof = True
                         self.bufsz = len(self.buf)
                     fsize = min(total, self.bufsz)
                     return self.buf[offset:fsize]
 
-            it = ContentCache(self.kp.download(path), 4096)
+            st_size = self.tree.getattr(path)['st_size']
+            it = ContentCache(self.kp.download(path), st_size)
             self.read_cache[path] = it
         else:
             it = self.read_cache[path]
@@ -221,6 +205,9 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     #创建文件
     def create(self, path, mode=0644, fi=None):
         log.debug("create %s", path)
+        name = os.path.basename(path)
+        if name.startswith('.~') or name.startswith('~'):
+            return
         self.kp.upload(path, '', True)
         #self.all_dir = self.walk_recursion("/")
         return 0
