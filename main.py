@@ -42,17 +42,17 @@ def get_time(time_str):
 
 def create_st(meta):
     if meta.get('path') == '/':
-        st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
-        st['st_ctime'] = st['st_mtime'] = st['st_atime'] = time.time()
-        return st
+        now = time.time()
+        return dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=2,
+                    st_ctime=now, st_mtime=now, st_atime=now)
     if meta['type'] == 'folder':
-        st = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=1)
+        attrs = dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=2)
     else:
-        st = dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1,
-                  st_size=meta['size'])
-    st['st_ctime'] = get_time(meta['create_time'])
-    st['st_mtime'] = st['st_atime'] = get_time(meta['modify_time'])
-    return st
+        attrs = dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1,
+                     st_size=meta['size'])
+    attrs['st_ctime'] = get_time(meta['create_time'])
+    attrs['st_mtime'] = attrs['st_atime'] = get_time(meta['modify_time'])
+    return attrs
 
 
 class TreeCache():
@@ -71,7 +71,7 @@ class TreeCache():
         if meta is None:
             return
 
-        node['st'] = create_st(meta)
+        node['attrs'] = create_st(meta)
         if meta.get('path') == '/' or meta['type'] == 'folder':
             node['type'] = 'folder'
             files = meta.get('files', [])
@@ -80,7 +80,7 @@ class TreeCache():
             if 'files' not in node:
                 fnodes = dict()
                 for x in files:
-                    fnodes[x['name']] = dict(st=create_st(x),
+                    fnodes[x['name']] = dict(attrs=create_st(x),
                                              type=x['type'])
                 node['files'] = fnodes
         else:
@@ -116,11 +116,45 @@ class TreeCache():
     def getattr(self, path):
         node = self.getnode(path, False)
         if node:
-            return node['st']
+            return node['attrs']
 
     def readdir(self, path):
         node = self.getnode(path, True)
         return node['dirs']
+
+
+class ContentCache():
+    def __init__(self, r, tsize=0):
+        self.raw = r.raw
+        self.data = bytes()
+        self.tsize = tsize
+        self.modified = False
+
+    def read(self, size, offset):
+        total = size + offset
+        bufsz = len(self.data)
+        if bufsz < total and self.raw.readable():
+            try:
+                self.data += self.raw.read(total - bufsz)
+            except (StopIteration, ValueError):
+                self.raw.close()
+            bufsz = len(self.data)
+        fsize = min(total, bufsz)
+        return self.data[offset:fsize]
+
+    def truncate(self, length):
+        self.data = self.data[:length]
+        self.modified = True
+
+    def write(self, data, offset):
+        self.data = self.data[:offset] + data
+        self.modified = True
+
+    def flush(self, path, kp):
+        if self.modified:
+            log.debug("upload: %s", path)
+            kp.upload(path, self.data, True)
+            self.modified = False
 
 
 class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
@@ -129,87 +163,86 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         self.tree = TreeCache(kp)
         self.read_cache = dict()
 
-    #文件属性
+    def access(self, path, amode):
+        log.debug("access: %s, amode=%s", path, str(amode))
+        return 0
+
     def getattr(self, path, fh=None):
-        log.debug("getattr: %s", path)
-        st = self.tree.getattr(path)
-        if not st:
+        log.debug("getattr: %s, fh=%s", path, str(fh))
+        attrs = self.tree.getattr(path)
+        if not attrs:
             log.debug("getattr: %s not exists!", path)
             raise fuse.FuseOSError(errno.ENOENT)
-        return st
+        return attrs
 
-    #文件列表
     def readdir(self, path, fh):
-        log.debug("readdir: %s", path)
+        log.debug("readdir: %s, fh=%s", path, str(fh))
         return self.tree.readdir(path)
 
-    #重命名/移动文件
     def rename(self, old, new):
         log.debug("rename %s to %s", old, new)
         self.kp.move(old, new)
         #self.all_dir = self.walk_recursion("/")
 
-    #创建目录
     def mkdir(self, path, mode=0644):
-        log.debug("mkdir: %s", path)
+        log.debug("mkdir: %s, mode=%d", path, mode)
         self.kp.mkdir(path)
         #self.all_dir = self.walk_recursion("/")
 
-    #删除目录
     def rmdir(self, path):
         log.debug("rmdir: %s", path)
         self.kp.delete(path)
         #self.all_dir = self.walk_recursion("/")
 
-    #删除文件
     unlink = rmdir
 
-    #读文件
-    def read(self, path, size, offset, fh):
-        log.debug("read: %s, size: %d, offset: %d", path, size, offset)
+    def open(self, path, flags):
+        log.debug("open: %s, flags=%d", path, flags)
         if not path in self.read_cache:
-            class ContentCache():
-                def __init__(self, r, tsize):
-                    self.raw = r.raw
-                    self.buf = bytes()
-                    self.bufsz = 0
-                    self.eof = False
-                    self.tsize = tsize
-
-                def read(self, size, offset):
-                    total = size + offset
-                    if self.bufsz < total and not self.eof:
-                        try:
-                            self.buf += self.raw.read(total - self.bufsz)
-                        except (StopIteration, ValueError):
-                            self.eof = True
-                        self.bufsz = len(self.buf)
-                    fsize = min(total, self.bufsz)
-                    return self.buf[offset:fsize]
-
             st_size = self.tree.getattr(path)['st_size']
             it = ContentCache(self.kp.download(path), st_size)
             self.read_cache[path] = it
-        else:
-            it = self.read_cache[path]
+        return 0
+
+    def release(self, path, fh):
+        log.debug("release: %s, fh=%s", path, str(fh))
+        return 0
+
+    def read(self, path, size, offset, fh):
+        log.debug("read: %s, size=%d, offset=%d, fh=%s",
+                  path, size, offset, str(fh))
+        it = self.read_cache[path]
         return it.read(size, offset)
 
-    #写文件
+    def truncate(self, path, length, fh=None):
+        log.debug("truncate: %s, length=%d, fh=%s",
+                  path, length, str(fh))
+        it = self.read_cache[path]
+        it.truncate(length)
+        # TBD: update
+
     def write(self, path, data, offset, fh):
-        log.debug("write %s, data: %s, offset: %d",
-                  path, cap_string(data, 10),  offset)
-        self.kp.upload(path, data, True)
-        #self.all_dir = self.walk_recursion("/")
+        log.debug("write: %s, data=%s, offset=%d, fh=%s",
+                  path, cap_string(data, 10),  offset, str(fh))
+        it = self.read_cache[path]
+        it.write(data, offset)
+        # TBD: update
         return len(data)
 
-    #创建文件
+    def flush(self, path, fh):
+        log.debug("flush: %s, fh=%s", path, str(fh))
+        it = self.read_cache[path]
+        it.flush(path, self.kp)
+        # TBD: update
+        return 0
+
     def create(self, path, mode=0644, fi=None):
-        log.debug("create %s", path)
+        log.debug("create: %s, mode: %d, fi=%d", path, mode, fi)
         name = os.path.basename(path)
         if name.startswith('.~') or name.startswith('~'):
             return
         self.kp.upload(path, '', True)
-        #self.all_dir = self.walk_recursion("/")
+        # TBD: update
         return 0
 
 
