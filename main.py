@@ -40,6 +40,12 @@ def get_time(time_str):
     return time.mktime(time.strptime(time_str, "%Y-%m-%d %H:%M:%S"))
 
 
+def update_mtime(attrs, mtime=None):
+    if mtime is None:
+        mtime = time.time()
+    attrs['st_mtime'] = attrs['st_atime'] = mtime
+
+
 def create_stat(isdir, size=0, ctime=None, mtime=None):
     now = time.time()
     if ctime is None:
@@ -72,14 +78,18 @@ class ContentCache():
         self.tsize = tsize
         self.modified = False
 
+    def readable(self):
+        return self.raw and self.raw.readable()
+
     def read(self, size, offset):
         total = size + offset
         bufsz = len(self.data)
-        if bufsz < total and self.raw.readable():
+        if bufsz < total and self.readable():
             try:
                 self.data += self.raw.read(total - bufsz)
             except (StopIteration, ValueError):
                 self.raw.close()
+                self.raw = None
             bufsz = len(self.data)
         fsize = min(total, bufsz)
         return self.data[offset:fsize]
@@ -104,9 +114,9 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         self.kp = kp
         self.data_caches = dict()
         self.tree = dict()
-        self.build('/')
+        self.build('/', self.tree)
 
-    def build(self, path, node=None):
+    def build(self, path, node):
         """
         {
             type: 'file' or 'folder'
@@ -128,8 +138,6 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
             }
         }
         """
-        if node is None:
-            node = self.get_node(path)
         meta = self.kp.metadata(path)
         if meta is None:
             return
@@ -169,7 +177,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
             node = node.get('files').get(name)
             if node is None:
                 return
-            cur_dir += name + '/'
+            cur_dir = os.path.join(cur_dir, name)
 
         if node.get('type') == 'folder' and 'dirs' not in node and dirs:
             self.build(path, node)
@@ -185,7 +193,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         pnode = self.get_node(adir)
         if pnode:
             pnode['dirs'].remove(aname)
-            pnode['attrs']['st_mtime'] = time.time()
+            update_mtime(pnode['attrs'])
             return pnode['files'].pop(aname, None)
 
     def insert_node(self, path, node):
@@ -194,7 +202,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         if pnode:
             pnode['files'][aname] = node
             pnode['dirs'].append(aname)
-            pnode['attrs']['st_mtime'] = time.time()
+            update_mtime(pnode['attrs'])
         return node
 
     #----------------------------------------------------
@@ -236,7 +244,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     def unlink(self, path):
         log.debug("unlink: %s", path)
         self.rmdir(path)
-        self.data_caches.pop(path)
+        self.data_caches.pop(path, None)
 
     def open(self, path, flags):
         log.debug("open: %s, flags=%d", path, flags)
@@ -263,6 +271,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         it.truncate(length)
         node = self.get_node(path)
         node['attrs']['st_size'] = length
+        update_mtime(node['attrs'])
 
     def write(self, path, data, offset, fh):
         log.debug("write: %s, data=%s, offset=%d, fh=%s",
@@ -271,6 +280,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         it.write(data, offset)
         node = self.get_node(path)
         node['attrs']['st_size'] = offset + len(data)
+        update_mtime(node['attrs'])
         return len(data)
 
     def flush(self, path, fh):
@@ -278,7 +288,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         it = self.data_caches[path]
         it.flush(path, self.kp)
         node = self.get_node(path)
-        node['attrs']['st_mtime'] = time.time()
+        update_mtime(node['attrs'])
         return 0
 
     def create(self, path, mode=0644, fi=None):
@@ -287,7 +297,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         self.create_node(path, False)
         name = os.path.basename(path)
         if name.startswith('.~') or name.startswith('~'):
-            return
+            return 0
         self.kp.upload(path, '', True)
         return 0
 
@@ -311,6 +321,7 @@ if __name__ == "__main__":
         log_to_stdout(log)
 
     echo_msg()
+    print 'Mount kuaipan to "{}"'.format(args.mount_point)
 
     # Call ipython when raising exception
     #from IPython.core import ultratb
