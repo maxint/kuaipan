@@ -50,7 +50,8 @@ def create_stat(isdir, size=0, ctime=None, mtime=None):
         return dict(st_mode=(stat.S_IFDIR | 0644), st_nlink=2,
                     st_ctime=ctime, st_mtime=mtime, st_atime=mtime)
     else:
-        return dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1, st_size=0,
+        return dict(st_mode=(stat.S_IFREG | 0644), st_nlink=1,
+                    st_size=size,
                     st_ctime=ctime, st_mtime=mtime, st_atime=mtime)
 
 
@@ -240,7 +241,7 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     def open(self, path, flags):
         log.debug("open: %s, flags=%d", path, flags)
         if not path in self.data_caches:
-            st_size = self.tree.getattr(path)['st_size']
+            st_size = self.getattr(path)['st_size']
             it = ContentCache(self.kp.download(path).raw, st_size)
             self.data_caches[path] = it
         return 0
@@ -300,21 +301,22 @@ def echo_msg():
     print(u"|------------------------------------------------")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        mount_point = 'Kuaipan'
-        #print("Usage: %s <point>" % sys.argv[0])
-        #exit(1)
-    else:
-        mount_point = sys.argv[1]
+    import argparse
+    parser = argparse.ArgumentParser(description='Kuaipan Fuse System')
+    parser.add_argument('mount_point', nargs='?', default='Kuaipan')
+    parser.add_argument('-D', '--debug', action='store_true')
+    args = parser.parse_args()
 
-    log_to_stdout(log)
+    if args.debug:
+        log_to_stdout(log)
+
     echo_msg()
 
     # Call ipython when raising exception
-    from IPython.core import ultratb
-    sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-                                         color_scheme='Linux',
-                                         call_pdb=1)
+    #from IPython.core import ultratb
+    #sys.excepthook = ultratb.FormattedTB(mode='Verbose',
+                                         #color_scheme='Linux',
+                                         #call_pdb=1)
 
     # Create Kuaipan Client
     CACHED_KEYFILE = '.cached_kuaipan_key.json'
@@ -334,7 +336,7 @@ if __name__ == "__main__":
 
     import os
     fuse = fuse.FUSE(KuaipanFuse(kp),
-                     mount_point,
+                     args.mount_point,
                      foreground=True,
                      uid=os.getuid(),
                      gid=os.getgid())
