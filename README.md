@@ -7,14 +7,6 @@ Python API and fuse file system for kuaipan.cn
 - main.py - Fuse file system for kuaipan.cn
 
 
-Requirements
-------------
-
-- requests
-- requests\_oauthlib
-- json
-
-
 Install
 -------
 
@@ -25,4 +17,4 @@ Usage
 
 Mount yout kuaipan to given mount directory:
 
-    main.py <mount point>
+    python2 main.py <mount point>

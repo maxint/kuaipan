@@ -32,10 +32,6 @@ def log_to_stdout(log):
     log.addHandler(ch)
 
 
-def cap_string(s, l):
-    return s if len(s) < l else s[0:l - 3] + '...'
-
-
 def get_time(time_str):
     return time.mktime(time.strptime(time_str, "%Y-%m-%d %H:%M:%S"))
 
@@ -109,7 +105,23 @@ class ContentCache():
             self.modified = False
 
 
-class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
+class LoggingMixIn:
+    def __call__(self, op, path, *args):
+        log.debug('-> %s %s %s', op, path, repr(args))
+        ret = '[Unhandled Exception]'
+        try:
+            ret = getattr(self, op)(path, *args)
+            return ret
+        except OSError, e:
+            ret = str(e)
+            raise
+        finally:
+            def cap_string(s, l):
+                return s if len(s) < l else s[0:l - 3] + '...'
+            log.debug('<- %s %s', op, cap_string(repr(ret), 10))
+
+
+class KuaipanFuse(LoggingMixIn, fuse.Operations):
     def __init__(self, kp):
         self.kp = kp
         self.data_caches = dict()
@@ -208,23 +220,18 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
     #----------------------------------------------------
 
     def access(self, path, amode):
-        log.debug("access: %s, amode=%s", path, str(amode))
         return 0
 
     def getattr(self, path, fh=None):
-        log.debug("getattr: %s, fh=%s", path, str(fh))
         node = self.get_node(path, False)
         if not node:
-            log.debug("getattr: %s not exists!", path)
             raise fuse.FuseOSError(errno.ENOENT)
         return node['attrs']
 
     def readdir(self, path, fh):
-        log.debug("readdir: %s, fh=%s", path, str(fh))
         return self.get_node(path, True)['dirs']
 
     def rename(self, old, new):
-        log.debug("rename %s to %s", old, new)
         self.kp.move(old, new)
         # update
         node = self.pop_node(old)
@@ -232,22 +239,18 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
             self.insert_node(new, node)
 
     def mkdir(self, path, mode=0644):
-        log.debug("mkdir: %s, mode=%d", path, mode)
         self.kp.mkdir(path)
         self.create_node(path, True)
 
     def rmdir(self, path):
-        log.debug("rmdir: %s", path)
         self.kp.delete(path)
         self.pop_node(path)
 
     def unlink(self, path):
-        log.debug("unlink: %s", path)
         self.rmdir(path)
         self.data_caches.pop(path, None)
 
     def open(self, path, flags):
-        log.debug("open: %s, flags=%d", path, flags)
         if not path in self.data_caches:
             st_size = self.getattr(path)['st_size']
             it = ContentCache(self.kp.download(path).raw, st_size)
@@ -255,18 +258,13 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         return 0
 
     def release(self, path, fh):
-        log.debug("release: %s, fh=%s", path, str(fh))
         return 0
 
     def read(self, path, size, offset, fh):
-        log.debug("read: %s, size=%d, offset=%d, fh=%s",
-                  path, size, offset, str(fh))
         it = self.data_caches[path]
         return it.read(size, offset)
 
     def truncate(self, path, length, fh=None):
-        log.debug("truncate: %s, length=%d, fh=%s",
-                  path, length, str(fh))
         it = self.data_caches[path]
         it.truncate(length)
         node = self.get_node(path)
@@ -274,8 +272,6 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         update_mtime(node['attrs'])
 
     def write(self, path, data, offset, fh):
-        log.debug("write: %s, data=%s, offset=%d, fh=%s",
-                  path, cap_string(data, 10),  offset, str(fh))
         it = self.data_caches[path]
         it.write(data, offset)
         node = self.get_node(path)
@@ -284,7 +280,6 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         return len(data)
 
     def flush(self, path, fh):
-        log.debug("flush: %s, fh=%s", path, str(fh))
         it = self.data_caches[path]
         it.flush(path, self.kp)
         node = self.get_node(path)
@@ -292,7 +287,6 @@ class KuaipanFuse(fuse.LoggingMixIn, fuse.Operations):
         return 0
 
     def create(self, path, mode=0644, fi=None):
-        log.debug("create: %s, mode: %d, fi=%s", path, mode, str(fi))
         self.data_caches[path] = ContentCache()
         self.create_node(path, False)
         name = os.path.basename(path)
