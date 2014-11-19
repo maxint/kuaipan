@@ -16,10 +16,11 @@ import fuse
 import stat
 import sys
 import time
-import logging
 import errno
+import cache
 
-log = logging.getLogger(__file__)
+import logging
+log = logging.getLogger('kpfuse')
 
 
 def log_to_stdout(log):
@@ -67,44 +68,6 @@ def create_stat2(meta):
                            get_time(meta['modify_time']))
 
 
-class ContentCache():
-    def __init__(self, r=None, tsize=0):
-        self.raw = r
-        self.data = bytes()
-        self.tsize = tsize
-        self.modified = False
-
-    def readable(self):
-        return self.raw and self.raw.readable()
-
-    def read(self, size, offset):
-        total = size + offset
-        bufsz = len(self.data)
-        if bufsz < total and self.readable():
-            try:
-                self.data += self.raw.read(total - bufsz)
-            except (StopIteration, ValueError):
-                self.raw.close()
-                self.raw = None
-            bufsz = len(self.data)
-        fsize = min(total, bufsz)
-        return self.data[offset:fsize]
-
-    def truncate(self, length):
-        self.data = self.data[:length]
-        self.modified = True
-
-    def write(self, data, offset):
-        self.data = self.data[:offset] + data
-        self.modified = True
-
-    def flush(self, path, kp):
-        if self.modified:
-            log.debug("upload: %s", path)
-            kp.upload(path, self.data, True)
-            self.modified = False
-
-
 class LoggingMixIn:
     def __call__(self, op, path, *args):
         log.debug('-> %s %s %s', op, path, repr(args))
@@ -124,7 +87,7 @@ class LoggingMixIn:
 class KuaipanFuse(LoggingMixIn, fuse.Operations):
     def __init__(self, kp):
         self.kp = kp
-        self.data_caches = dict()
+        self.caches = cache.CachePool()
         self.tree = dict()
         self.build('/', self.tree)
 
@@ -217,7 +180,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
             update_mtime(pnode['attrs'])
         return node
 
-    #----------------------------------------------------
+    # ----------------------------------------------------
 
     def access(self, path, amode):
         return 0
@@ -248,31 +211,30 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
 
     def unlink(self, path):
         self.rmdir(path)
-        self.data_caches.pop(path, None)
+        self.caches.remove(path)
 
     def open(self, path, flags):
-        if not path in self.data_caches:
+        if not self.caches.contains(path):
             st_size = self.getattr(path)['st_size']
-            it = ContentCache(self.kp.download(path).raw, st_size)
-            self.data_caches[path] = it
+            self.caches.add(path, self.kp.download(path).raw, st_size)
         return 0
 
     def release(self, path, fh):
         return 0
 
     def read(self, path, size, offset, fh):
-        it = self.data_caches[path]
+        it = self.caches[path]
         return it.read(size, offset)
 
     def truncate(self, path, length, fh=None):
-        it = self.data_caches[path]
+        it = self.caches[path]
         it.truncate(length)
         node = self.get_node(path)
         node['attrs']['st_size'] = length
         update_mtime(node['attrs'])
 
     def write(self, path, data, offset, fh):
-        it = self.data_caches[path]
+        it = self.caches[path]
         it.write(data, offset)
         node = self.get_node(path)
         node['attrs']['st_size'] = offset + len(data)
@@ -280,14 +242,14 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return len(data)
 
     def flush(self, path, fh):
-        it = self.data_caches[path]
+        it = self.caches[path]
         it.flush(path, self.kp)
         node = self.get_node(path)
         update_mtime(node['attrs'])
         return 0
 
     def create(self, path, mode=0644, fi=None):
-        self.data_caches[path] = ContentCache()
+        self.caches.add(path)
         self.create_node(path, False)
         name = os.path.basename(path)
         if name.startswith('.~') or name.startswith('~'):
@@ -304,6 +266,17 @@ def echo_msg():
     print(u"|   Email:  NOT_SPAM_lnychina{AT}gmail{DOT}com  |")
     print(u"|------------------------------------------------")
 
+
+def ipdb_debug():
+    # Call ipython when raising exception
+    try:
+        from IPython.core import ultratb
+        sys.excepthook = ultratb.FormattedTB(mode='Verbose',
+                                             color_scheme='Linux',
+                                             call_pdb=1)
+    except:
+        log.warn('Install IPython before enable ipdb')
+
 if __name__ == "__main__":
     import argparse
 
@@ -315,21 +288,22 @@ if __name__ == "__main__":
         return path
 
     parser = argparse.ArgumentParser(description='Kuaipan Fuse System')
-    parser.add_argument('mount_point', type=readable_dir)
-    parser.add_argument('-D', '--debug', action='store_true')
+    parser.add_argument('mount_point', type=readable_dir,
+                        help='Mount point')
+    parser.add_argument('-D', '--verbose', action='store_true',
+                        help='Output logging')
+    parser.add_argument('--ipdb', action='store_true',
+                        help='Enable ipdb for debug')
     args = parser.parse_args()
 
-    if args.debug:
+    if args.verbose:
         log_to_stdout(log)
+
+    if args.ipdb:
+        ipdb_debug()
 
     echo_msg()
     print 'Mount kuaipan to "{}"'.format(args.mount_point)
-
-    # Call ipython when raising exception
-    #from IPython.core import ultratb
-    #sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-                                         #color_scheme='Linux',
-                                         #call_pdb=1)
 
     # Create Kuaipan Client
     CACHED_KEYFILE = '.cached_kuaipan_key.json'
