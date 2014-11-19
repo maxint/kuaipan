@@ -118,7 +118,6 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
             }
         }
         """
-        path = os.path.normpath(path)
         meta = self.kp.metadata(path)
         if meta is None:
             return
@@ -141,7 +140,6 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return node
 
     def get_node(self, path, dirs=False):
-        path = os.path.normpath(path)
         if path == '/':
             return self.tree
 
@@ -165,13 +163,11 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return node
 
     def create_node(self, path, isdir):
-        path = os.path.normpath(path)
         node = dict(type='folder' if isdir else 'file',
                     attrs=create_stat(isdir))
         return self.insert_node(path, node)
 
     def pop_node(self, path):
-        path = os.path.normpath(path)
         adir, aname = os.path.split(path)
         pnode = self.get_node(adir)
         if pnode:

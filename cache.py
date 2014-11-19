@@ -39,8 +39,9 @@ class FileCache():
         return self.data[offset:fsize]
 
     def truncate(self, length):
-        self.data = self.data[:length]
-        self.modified = True
+        if len(self.data) != length:
+            self.data = self.data[:length]
+            self.modified = True
 
     def write(self, data, offset):
         self.data = self.data[:offset] + data
