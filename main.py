@@ -18,6 +18,7 @@ import sys
 import time
 import errno
 import cache
+import os
 
 import logging
 log = logging.getLogger('kpfuse')
@@ -70,7 +71,7 @@ def create_stat2(meta):
 
 class LoggingMixIn:
     def __call__(self, op, path, *args):
-        log.debug('-> %s %s %s', op, path, repr(args))
+        log.debug('-> %s: %s (%s)', op, path, ','.join(map(str, args)))
         ret = '[Unhandled Exception]'
         try:
             ret = getattr(self, op)(path, *args)
@@ -80,14 +81,17 @@ class LoggingMixIn:
             raise
         finally:
             def cap_string(s, l):
-                return s if len(s) < l else s[0:l - 3] + '...'
-            log.debug('<- %s %s', op, cap_string(repr(ret), 10))
+                if not s.startswith('{') and not s.startswith('['):
+                    return s if len(s) < l else s[0:l - 3] + '...'
+                else:
+                    return s
+            log.debug('<- %s: %s %s', op, path, cap_string(repr(ret), 20))
 
 
 class KuaipanFuse(LoggingMixIn, fuse.Operations):
-    def __init__(self, kp):
+    def __init__(self, kp, pooldir):
         self.kp = kp
-        self.caches = cache.CachePool()
+        self.caches = cache.CachePool(pooldir)
         self.tree = dict()
         self.build('/', self.tree)
 
@@ -109,10 +113,12 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
                     attrs:
                     [dirs]:
                     [files]:
-                }
+                },
+                ...
             }
         }
         """
+        path = os.path.normpath(path)
         meta = self.kp.metadata(path)
         if meta is None:
             return
@@ -127,8 +133,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
                 fnodes = dict()
                 for x in files:
                     fnodes[x['name']] = dict(type=x['type'],
-                                             attrs=create_stat2(x),
-                                             )
+                                             attrs=create_stat2(x))
                 node['files'] = fnodes
         else:
             node['type'] = 'file'
@@ -136,6 +141,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return node
 
     def get_node(self, path, dirs=False):
+        path = os.path.normpath(path)
         if path == '/':
             return self.tree
 
@@ -144,7 +150,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         cur_dir = '/'
         for name in names:
             if node.get('type') != 'folder':
-                return
+                return node
 
             if 'files' not in node:
                 if self.build(cur_dir, node) is None:
@@ -159,11 +165,13 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return node
 
     def create_node(self, path, isdir):
+        path = os.path.normpath(path)
         node = dict(type='folder' if isdir else 'file',
                     attrs=create_stat(isdir))
         return self.insert_node(path, node)
 
     def pop_node(self, path):
+        path = os.path.normpath(path)
         adir, aname = os.path.split(path)
         pnode = self.get_node(adir)
         if pnode:
@@ -214,17 +222,16 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         self.caches.remove(path)
 
     def open(self, path, flags):
-        if not self.caches.contains(path):
+        if path is not self.caches:
             st_size = self.getattr(path)['st_size']
-            self.caches.add(path, self.kp.download(path).raw, st_size)
+            self.caches.add(path, self.kp.download(path), st_size)
         return 0
 
     def release(self, path, fh):
         return 0
 
     def read(self, path, size, offset, fh):
-        it = self.caches[path]
-        return it.read(size, offset)
+        return self.caches[path].read(size, offset)
 
     def truncate(self, path, length, fh=None):
         it = self.caches[path]
@@ -242,8 +249,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return len(data)
 
     def flush(self, path, fh):
-        it = self.caches[path]
-        it.flush(path, self.kp)
+        self.caches[path].flush(path, self.kp)
         node = self.get_node(path)
         update_mtime(node['attrs'])
         return 0
@@ -281,7 +287,6 @@ if __name__ == "__main__":
     import argparse
 
     def readable_dir(path):
-        import os.path
         if not os.path.isdir(path):
             msg = '"{}" is not a valid directory'.format(path)
             raise argparse.ArgumentTypeError(msg)
@@ -306,7 +311,12 @@ if __name__ == "__main__":
     print 'Mount kuaipan to "{}"'.format(args.mount_point)
 
     # Create Kuaipan Client
-    CACHED_KEYFILE = '.cached_kuaipan_key.json'
+    import tempfile
+    tempdir = os.path.join(tempfile.gettempdir(), 'kuaipan')
+    if not os.path.exists(tempdir):
+        os.mkdir(tempdir)
+
+    CACHED_KEYFILE = os.path.join(tempdir, 'cached_key.json')
     try:
         kp = kuaipan.load(CACHED_KEYFILE)
     except:
@@ -322,8 +332,7 @@ if __name__ == "__main__":
         kp.authorise(authoriseCallback)
         kp.save(CACHED_KEYFILE)
 
-    import os
-    fuse = fuse.FUSE(KuaipanFuse(kp),
+    fuse = fuse.FUSE(KuaipanFuse(kp, tempdir),
                      args.mount_point,
                      foreground=True,
                      uid=os.getuid(),

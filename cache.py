@@ -6,30 +6,35 @@
 """
 Local cache for FuseFS
 """
+import threading
 
 import logging
 log = logging.getLogger('kpfuse')
 
+
 class FileCache():
     def __init__(self, r=None, tsize=0):
-        self.raw = r
+        self.raw = r.raw if r else None
         self.data = bytes()
         self.tsize = tsize
         self.modified = False
+        self.lock = threading.Lock() if r else None
 
     def readable(self):
         return self.raw and self.raw.readable()
 
     def read(self, size, offset):
         total = size + offset
-        bufsz = len(self.data)
-        if bufsz < total and self.readable():
-            try:
-                self.data += self.raw.read(total - bufsz)
-            except (StopIteration, ValueError):
-                self.raw.close()
-                self.raw = None
+        # add multiple thread protection for reading
+        with self.lock:
             bufsz = len(self.data)
+            if bufsz < total and self.readable():
+                try:
+                    self.data += self.raw.read(total - bufsz)
+                except (StopIteration, ValueError):
+                    self.raw.close()
+                    self.raw = None
+                bufsz = len(self.data)
         fsize = min(total, bufsz)
         return self.data[offset:fsize]
 
@@ -49,8 +54,9 @@ class FileCache():
 
 
 class CachePool():
-    def __init__(self):
+    def __init__(self, pooldir=None):
         self.data = dict()
+        self.pooldir = pooldir
 
     def get(self, path):
         return self.data.get(path)
@@ -69,5 +75,5 @@ class CachePool():
     def remove(self, path):
         self.data.pop(path, None)
 
-    def contains(self, path):
+    def __contains__(self, path):
         return path in self.data
