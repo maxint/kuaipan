@@ -81,11 +81,12 @@ class LoggingMixIn:
             raise
         finally:
             def cap_string(s, l):
-                if not s.startswith('{') and not s.startswith('['):
-                    return s if len(s) < l else s[0:l - 3] + '...'
-                else:
-                    return s
-            log.debug('<- %s: %s %s', op, path, cap_string(repr(ret), 20))
+                return s if len(s) < l else s[0:l - 3] + '...'
+            if isinstance(ret, str) and len(ret) > 1024:
+                msg = cap_string(repr(ret[:10]), 10)
+            else:
+                msg = repr(ret)
+            log.debug('<- %s: %s %s', op, path, msg)
 
 
 class KuaipanFuse(LoggingMixIn, fuse.Operations):
