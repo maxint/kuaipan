@@ -219,7 +219,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         self.caches.remove(path)
 
     def open(self, path, flags):
-        if path is not self.caches:
+        if path not in self.caches:
             st_size = self.getattr(path)['st_size']
             self.caches.add(path, self.kp.download(path), st_size)
         return 0
