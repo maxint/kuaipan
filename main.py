@@ -306,8 +306,16 @@ def echo_msg():
 
 if __name__ == "__main__":
     import argparse
+
+    def readable_dir(path):
+        import os.path
+        if not os.path.isdir(path):
+            msg = '"{}" is not a valid directory'.format(path)
+            raise argparse.ArgumentTypeError(msg)
+        return path
+
     parser = argparse.ArgumentParser(description='Kuaipan Fuse System')
-    parser.add_argument('mount_point', nargs='?', default='Kuaipan')
+    parser.add_argument('mount_point', type=readable_dir)
     parser.add_argument('-D', '--debug', action='store_true')
     args = parser.parse_args()
 
