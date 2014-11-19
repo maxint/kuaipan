@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
 #
@@ -300,8 +300,8 @@ def echo_msg():
     print(u"|------------------------------------------------")
     print(u"|            Kuaipan.cn Fuse System             |")
     print(u"|   Author: maxint                              |")
-    print(u"|   Link：http://github.com/maxint/kuaipan      |")
-    print(u"|   Email：NOT_SPAM_lnychina{AT}gmail{DOT}com   |")
+    print(u"|   Link:   http://github.com/maxint/kuaipan    |")
+    print(u"|   Email:  NOT_SPAM_lnychina{AT}gmail{DOT}com  |")
     print(u"|------------------------------------------------")
 
 if __name__ == "__main__":
@@ -331,6 +331,7 @@ if __name__ == "__main__":
         def authoriseCallback(url):
             import webbrowser
             webbrowser.open(url)
+            print 'Open in browser: ' + url
             return input('Please input the verifier:')
 
         CONSUMER_KEY = 'xcNBQcp5oxmRanaC'

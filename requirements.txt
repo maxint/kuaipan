@@ -1,3 +1,4 @@
 requests
-git+git://github.com/maxint/requests-oauthlib
+requests-oauthlib
+#git+git://github.com/maxint/requests-oauthlib
 fusepy
