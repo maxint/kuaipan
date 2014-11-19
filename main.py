@@ -307,11 +307,10 @@ if __name__ == "__main__":
         ipdb_debug()
 
     echo_msg()
-    print 'Mount kuaipan to "{}"'.format(args.mount_point)
+    print('Mount kuaipan to "%s"' % args.mount_point)
 
     # Create Kuaipan Client
-    import tempfile
-    tempdir = os.path.join(tempfile.gettempdir(), 'kuaipan')
+    tempdir = os.path.join(args.mount_point, '.kpfuse')
     if not os.path.exists(tempdir):
         os.mkdir(tempdir)
 
