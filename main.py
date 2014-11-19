@@ -296,6 +296,8 @@ if __name__ == "__main__":
                         help='Output logging')
     parser.add_argument('--ipdb', action='store_true',
                         help='Enable ipdb for debug')
+    parser.add_argument('--foreground', '-f', action='store_true',
+                        help='Run in foreground, for debug')
     args = parser.parse_args()
 
     if args.verbose:
@@ -329,8 +331,13 @@ if __name__ == "__main__":
         kp.authorise(authoriseCallback)
         kp.save(CACHED_KEYFILE)
 
-    fuse = fuse.FUSE(KuaipanFuse(kp, tempdir),
-                     args.mount_point,
-                     foreground=True,
-                     uid=os.getuid(),
-                     gid=os.getgid())
+    fuseop = KuaipanFuse(kp, tempdir)
+    if not args.verbose:
+        # disable logging
+        fuseop.__call__ = None
+    fuse.FUSE(fuseop,
+              args.mount_point,
+              foreground=args.foreground,
+              uid=os.getuid(),
+              gid=os.getgid(),
+              nonempty=True)
