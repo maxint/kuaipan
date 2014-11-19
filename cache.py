@@ -23,19 +23,26 @@ class FileCache():
     def readable(self):
         return self.raw and self.raw.readable()
 
+    def size(self):
+        return len(self.data)
+
+    def _read(self, total):
+        bufsz = self.size()
+        if bufsz < total and self.readable():
+            try:
+                self.data += self.raw.read(total - bufsz)
+            except (StopIteration, ValueError):
+                self.raw.close()
+                self.raw = None
+                self.lock = None
+
     def read(self, size, offset):
         total = size + offset
         # add multiple thread protection for reading
-        with self.lock:
-            bufsz = len(self.data)
-            if bufsz < total and self.readable():
-                try:
-                    self.data += self.raw.read(total - bufsz)
-                except (StopIteration, ValueError):
-                    self.raw.close()
-                    self.raw = None
-                bufsz = len(self.data)
-        fsize = min(total, bufsz)
+        if self.lock:
+            with self.lock:
+                self._read(total)
+        fsize = min(total, self.size())
         return self.data[offset:fsize]
 
     def truncate(self, length):
