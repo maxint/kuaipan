@@ -32,5 +32,12 @@
       ],
       "propagate": "no"
     }
+  },
+  "root": {
+    "level": "INFO",
+    "handlers": [
+      "console",
+      "file_handler"
+    ]
   }
 }

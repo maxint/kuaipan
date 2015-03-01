@@ -9,23 +9,26 @@ def http_authorise(url, oauth_key='oauth_verifier', port=8888):
 
     webbrowser.open(url)
 
-    code = None
+    class ProxyClass:
+        code = None
+        key = oauth_key
 
-    class ServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-        def echo_html(self, content):
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(content)
-            self.wfile.close()
+        def __init__(self):
+            pass
 
-        def do_GET(self):
-            qs = urlparse.parse_qs(urlparse.urlsplit(self.path).query)
-            global oauth_key
-            if oauth_key in qs:
-                global code
-                code = qs[oauth_key][0]
-                self.echo_html('''<html>
+        class ServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+            def echo_html(self, content):
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                self.wfile.write(content)
+                self.wfile.close()
+
+            def do_GET(self):
+                qs = urlparse.parse_qs(urlparse.urlsplit(self.path).query)
+                if ProxyClass.key in qs:
+                    ProxyClass.code = qs[ProxyClass.key][0]
+                    self.echo_html('''<html>
     <head>
     <meta charset="utf-8"/>
     <title>OK</title>
@@ -33,10 +36,10 @@ def http_authorise(url, oauth_key='oauth_verifier', port=8888):
     <body>Succeed.</body>
     </html> ''')
 
-    httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', port), ServerRequestHandler)
+    httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', port), ProxyClass.ServerRequestHandler)
     httpd.handle_request()
-    while code is None:
+    while ProxyClass.code is None:
         pass
     httpd.server_close()
 
-    return code
+    return ProxyClass.code
