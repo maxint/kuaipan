@@ -1,37 +1,21 @@
-#! /usr/bin/env python2
-# -*- coding: utf-8 -*-
-# vim:fenc=utf-8
-#
-# Copyright © 2014 maxint <NOT_SPAM_lnychina@gmail.com>
-#
-# Distributed under terms of the MIT license.
+# coding: utf-8
 
 """
 Fuse file system for kuaipan.cn
 
 Code inspired from https://github.com/wusuopu/kuaipan-linux
 """
-import kuaipan
-import fuse
+
+import os
 import stat
-import sys
 import time
 import errno
-import cache
-import os
-
+import fuse
 import logging
-log = logging.getLogger('kpfuse')
 
+import cache
 
-def log_to_stdout(log):
-    log.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.DEBUG)
-    fmt = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    ch.setFormatter(fmt)
-    log.addHandler(ch)
+log = logging.getLogger(__name__)
 
 
 def get_time(time_str):
@@ -82,6 +66,7 @@ class LoggingMixIn:
         finally:
             def cap_string(s, l):
                 return s if len(s) < l else s[0:l - 3] + '...'
+
             if isinstance(ret, str) and len(ret) > 1024:
                 msg = cap_string(repr(ret[:10]), 10)
             else:
@@ -259,84 +244,3 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
             return 0
         self.kp.upload(path, '', True)
         return 0
-
-
-def echo_msg():
-    print(u"|------------------------------------------------")
-    print(u"|            Kuaipan.cn Fuse System             |")
-    print(u"|   Author: maxint                              |")
-    print(u"|   Link:   http://github.com/maxint/kuaipan    |")
-    print(u"|   Email:  NOT_SPAM_lnychina{AT}gmail{DOT}com  |")
-    print(u"|------------------------------------------------")
-
-
-def ipdb_debug():
-    # Call ipython when raising exception
-    try:
-        from IPython.core import ultratb
-        sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-                                             color_scheme='Linux',
-                                             call_pdb=1)
-    except:
-        log.warn('Install IPython before enable ipdb')
-
-if __name__ == "__main__":
-    import argparse
-
-    def readable_dir(path):
-        if not os.path.isdir(path):
-            msg = '"{}" is not a valid directory'.format(path)
-            raise argparse.ArgumentTypeError(msg)
-        return path
-
-    parser = argparse.ArgumentParser(description='Kuaipan Fuse System')
-    parser.add_argument('mount_point', type=readable_dir,
-                        help='Mount point')
-    parser.add_argument('-D', '--verbose', action='store_true',
-                        help='Output logging')
-    parser.add_argument('--ipdb', action='store_true',
-                        help='Enable ipdb for debug')
-    parser.add_argument('--foreground', '-f', action='store_true',
-                        help='Run in foreground, for debug')
-    args = parser.parse_args()
-
-    if args.verbose:
-        log_to_stdout(log)
-
-    if args.ipdb:
-        ipdb_debug()
-
-    echo_msg()
-    print('Mount kuaipan to "%s"' % args.mount_point)
-
-    # Create Kuaipan Client
-    tempdir = os.path.join(args.mount_point, '.kpfuse')
-    if not os.path.exists(tempdir):
-        os.mkdir(tempdir)
-
-    CACHED_KEYFILE = os.path.join(tempdir, 'cached_key.json')
-    try:
-        kp = kuaipan.load(CACHED_KEYFILE)
-    except:
-        def authoriseCallback(url):
-            import webbrowser
-            webbrowser.open(url)
-            print 'Open in browser: ' + url
-            return input('Please input the verifier:')
-
-        CONSUMER_KEY = 'xcNBQcp5oxmRanaC'
-        CONSUMER_SECRET = 'ilhYuLMWpyVDaLm4'
-        kp = kuaipan.Kuaipan(CONSUMER_KEY, CONSUMER_SECRET)
-        kp.authorise(authoriseCallback)
-        kp.save(CACHED_KEYFILE)
-
-    fuseop = KuaipanFuse(kp, tempdir)
-    if not args.verbose:
-        # disable logging
-        fuseop.__call__ = None
-    fuse.FUSE(fuseop,
-              args.mount_point,
-              foreground=args.foreground,
-              uid=os.getuid(),
-              gid=os.getgid(),
-              nonempty=True)

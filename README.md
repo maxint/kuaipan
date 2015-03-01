@@ -1,33 +1,36 @@
-Introduction
-------------
+# Kuaipan FUSE FileSystem
 
-Python API and fuse file system for kuaipan.cn
-
-- kuaipan.py - python API for kuaipan.cn
-- main.py - Fuse file system for kuaipan.cn
+FUSE file system for kuaipan.cn
 
 
-Install
--------
+# Install
 
 ```
-    pip install -r requirements.txt
+pip install https://github.com/maxint/kuaipan [--user]
 ```
+Note: use "--user" to install into user directory.
 
-Usage
------
 
-Mount yout kuaipan to given mount directory:
+# Requirements
+
+- fusepy
+- requests
+- requests-oauthlib
+
+
+# Usage
+
+Mount your kuaipan.cn cloud driver to given mount directory:
 ```
-    python2 main.py <mount point>
+kpfs <mount point>
 ```
 
 Umount it:
 ```
-    umount <mount point>
+umount <mount point>
 ```
 
 Help:
 ```
-    python2 main.py -h
+kpfs -h
 ```

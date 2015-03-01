@@ -1,4 +1,4 @@
-requests
-requests-oauthlib
-#git+git://github.com/maxint/requests-oauthlib
-fusepy
+# This is an implicit value, here for clarity
+--index-url https://pypi.python.org/simple/
+
+-e .

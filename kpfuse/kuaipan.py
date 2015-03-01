@@ -1,21 +1,16 @@
-#! /usr/bin/env python2
-# -*- coding: utf-8 -*-
-#
-# Copyright (C) 2014 maxint <NOT_SPAM_lnychina@gmail.com>
-# Distributed under terms of the MIT license.
+# coding: utf-8
 
 """
 Kuaipan Python API:
     http://www.kuaipan.cn/developers/document.htm
 """
 
-# Add custom module
-#import sys; sys.path.insert(0, '/home/maxint/code/requests-oauthlib')
-
-from requests_oauthlib import OAuth1Session
 import json
 import os
 from urllib import quote
+
+from requests_oauthlib import OAuth1Session
+
 
 API_VERSION = 1
 API_HOST = 'https://openapi.kuaipan.cn/'
@@ -25,13 +20,15 @@ AUTH_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
 
 
 class Kuaipan():
-    def __init__(self, client_key, client_secret,
+    def __init__(self,
+                 client_key, client_secret,
                  resource_owner_key=None, resource_owner_secret=None,
                  root='kuaipan'):
         self.oauth = OAuth1Session(client_key,
                                    client_secret,
                                    resource_owner_key,
                                    resource_owner_secret,
+                                   callback_uri='http://localhost:8888',
                                    signature_type=u'QUERY')
         self.root = root
 
@@ -81,9 +78,8 @@ class Kuaipan():
         r = self.oauth.get(url, **kargs)
         if r.status_code == 200:
             return r
-        return r
-        #else:
-            #raise Exception()
+        else:
+            raise Exception()
 
     def account_info(self):
         return self.get('account_info').json()
@@ -205,20 +201,16 @@ def load(filename):
             rs.get('resource_owner_secret'),
             rs.get('root'))
 
+
 if __name__ == '__main__':
     # Call ipython when raising exception
-    import sys
-    from IPython.core import ultratb
-    sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-                                         color_scheme='Linux',
-                                         call_pdb=1)
-
     CACHED_KEYFILE = '.cached_kuaipan_key.json'
     try:
         c = load(CACHED_KEYFILE)
     except:
         def authoriseCallback(url):
             import webbrowser
+
             webbrowser.open(url)
             return input('Please input the verifier:')
 

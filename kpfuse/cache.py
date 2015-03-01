@@ -1,15 +1,13 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
-# Copyright (C) 2014 maxint <NOT_SPAM_lnychina@gmail.com>
-# Distributed under terms of the MIT license.
+# coding: utf-8
 
 """
 Local cache for FuseFS
 """
-import threading
 
+import threading
 import logging
-log = logging.getLogger('kpfuse')
+
+log = logging.getLogger(__name__)
 
 
 class FileCache():
