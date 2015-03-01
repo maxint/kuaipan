@@ -12,10 +12,9 @@ from error import setup_logging
 
 def echo_msg():
     print(u"|------------------------------------------------")
-    print(u"|            Kuaipan.cn Fuse System             |")
-    print(u"|   Author: maxint                              |")
+    print(u"|         Kuaipan.cn Fuse File System           |")
+    print(u"|   Author: maxint <lnychina@gmail.com>         |")
     print(u"|   Link:   http://github.com/maxint/kuaipan    |")
-    print(u"|   Email:  NOT_SPAM_lnychina{AT}gmail{DOT}com  |")
     print(u"|------------------------------------------------")
 
 
@@ -28,7 +27,7 @@ def main():
             raise argparse.ArgumentTypeError(msg)
         return path
 
-    parser = argparse.ArgumentParser(description='Kuaipan Fuse System')
+    parser = argparse.ArgumentParser(description='Kuaipan Fuse File System')
     parser.add_argument('mount_point', type=readable_dir,
                         help='Mount point')
     parser.add_argument('-D', '--verbose', action='store_true',
