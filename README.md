@@ -6,7 +6,7 @@ FUSE file system for kuaipan.cn
 # Install
 
 ```
-pip install https://github.com/maxint/kuaipan [--user]
+pip install git+git://github.com/maxint/kuaipan [--user]
 ```
 Note: use "--user" to install into user directory.
 
