@@ -76,12 +76,10 @@ class DirNode(AbstractNode):
     def insert(self, name, node):
         self.build()
         self.nodes[name] = node
-        self.attribute.update()
 
     def remove(self, name):
         self.build()
         node = self.nodes.pop(name)
-        self.attribute.update()
         return node
 
     def get(self, name):

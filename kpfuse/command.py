@@ -63,7 +63,7 @@ def main():
     kp = None
     if args.username:
         profile_dir = os.path.expanduser('~/.kpfuse/' + args.username)
-        cache_path = os.path.join(profile_dir, '.kpfs', 'cached_key.json')
+        cache_path = os.path.join(profile_dir, 'cached_key.json')
         if os.path.exists(cache_path):
             log.debug('Load cached key from %s', cache_path)
             try:
@@ -72,17 +72,17 @@ def main():
             except:
                 kp = None
         else:
-            log.warn('Can not user data directory: %s', profile_dir)
+            log.warn('Can not find user data directory: %s', profile_dir)
 
     if kp is None:
         kp = kuaipan.Kuaipan('xcNBQcp5oxmRanaC', 'ilhYuLMWpyVDaLm4')
         kp.authorise(oauth_callback.http_authorise)
         args.username = kp.account_info()['user_name']
         log.debug('Create cached key')
-        cache_dir = os.path.expanduser('~/.kpfuse/' + args.username + '/.kpfs')
-        mkdirs(cache_dir)
+        cache_dir = os.path.expanduser('~/.kpfuse/' + args.username)
         cache_path = os.path.join(cache_dir, 'cached_key.json')
         log.debug('Save cached key to %s', cache_path)
+        mkdirs(cache_dir)
         kp.save(cache_path)
 
     log.info('Login username: %s', args.username)
