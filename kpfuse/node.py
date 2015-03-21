@@ -127,10 +127,9 @@ def create_stat(meta):
 
 
 class NodeTree:
-    def __init__(self, kp, root_dir):
+    def __init__(self, kp):
         assert isinstance(kp, Kuaipan)
         self.kp = kp
-        self.root_dir = root_dir
         self.tree = DirNode(self.kp, '/')
 
     def get(self, path):
@@ -151,7 +150,8 @@ class NodeTree:
 
     def create(self, path, isdir):
         node = DirNode(self.kp, path, dict()) if isdir else FileNode(self.kp, path)
-        return self.insert(path, node)
+        self.insert(path, node)
+        return node
 
     def remove(self, path):
         dir_path, base_name = os.path.split(path)

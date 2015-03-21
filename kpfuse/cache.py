@@ -4,17 +4,23 @@
 Local cache for FuseFS
 """
 
-import threading
+import os
 import logging
+import threading
+
+from .node import FileNode
+from .node import NodeTree
 
 log = logging.getLogger(__name__)
 
 
 class FileCache():
-    def __init__(self, r=None, tsize=0):
+    def __init__(self, node, r=None):
+        assert isinstance(node, FileNode)
+        self.node = node
         self.raw = r.raw if r else None
         self.data = bytes()
-        self.tsize = tsize
+        self.total = node.attribute.size
         self.modified = False
         self.lock = threading.Lock() if r else None
 
@@ -47,10 +53,13 @@ class FileCache():
         if len(self.data) != length:
             self.data = self.data[:length]
             self.modified = True
+            self.node.attribute.set_size(length)
 
     def write(self, data, offset):
         self.data = self.data[:offset] + data
         self.modified = True
+        self.node.attribute.set_size(len(self.data))
+        return len(data)
 
     def flush(self, path, kp):
         if self.modified:
@@ -60,26 +69,56 @@ class FileCache():
 
 
 class CachePool():
-    def __init__(self, pool_dir=None):
+    def __init__(self, tree, pool_dir):
+        assert isinstance(tree, NodeTree)
+        assert os.path.isdir(pool_dir)
         self.data = dict()
+        self.tree = tree
+        self.kp = tree.kp
         self.pool_dir = pool_dir
+
+    def __getitem__(self, path):
+        c = self.data[path]
+        assert isinstance(c, FileCache)
+        return c
+
+    def __contains__(self, path):
+        return path in self.data
 
     def get(self, path):
         return self.data.get(path)
 
-    def __getitem__(self, path):
-        return self.get(path)
+    def open(self, path):
+        if path in self.data:
+            return self.data[path]
 
-    def add(self, path, r=None, size=0):
-        if path not in self.data:
-            c = FileCache(r, size)
-            self.data[path] = c
-            return c
-        else:
-            return self.get(path)
+        node = self.tree.get(path)
+        r = self.kp.download(path)
+        c = FileCache(node, r)
+        self.data[path] = c
+
+        return c
+
+    def create(self, path):
+        if path in self.data:
+            return self.data[path]
+
+        node = self.tree.create(path, False)
+        name = os.path.basename(path)
+        if not name.startswith('.~') and not name.startswith('~'):
+            # TODO: remove it?
+            self.kp.upload(path, '', True)
+
+        c = FileCache(node)
+        self.data[path] = c
+
+        return c
+
+    def flush(self, path):
+        c = self.data[path]
+        assert isinstance(c, FileCache)
+        c.flush(path, self.kp)
+        c.node.attribute.update()
 
     def remove(self, path):
         self.data.pop(path, None)
-
-    def __contains__(self, path):
-        return path in self.data

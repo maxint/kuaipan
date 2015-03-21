@@ -41,12 +41,8 @@ class LoggingMixIn:
 class KuaipanFuse(LoggingMixIn, fuse.Operations):
     def __init__(self, kp, pool_dir):
         self.kp = kp
-        self.caches = cache.CachePool(pool_dir)
-        self.pool_dir = pool_dir
-        self.tree = NodeTree(kp, pool_dir)
-
-    def get_path(self, path):
-        return os.path.join(self.pool_dir, path)
+        self.tree = NodeTree(kp)
+        self.caches = cache.CachePool(self.tree, pool_dir)
 
     # ----------------------------------------------------
 
@@ -82,9 +78,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         self.caches.remove(path)
 
     def open(self, path, flags):
-        if path not in self.caches:
-            st_size = self.getattr(path)['st_size']
-            self.caches.add(path, self.kp.download(path), st_size)
+        self.caches.open(path)
         return 0
 
     def release(self, path, fh):
@@ -94,29 +88,15 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         return self.caches[path].read(size, offset)
 
     def truncate(self, path, length, fh=None):
-        it = self.caches[path]
-        it.truncate(length)
-        node = self.tree.get(path)
-        node.attribute.set_size(length)
+        return self.caches[path].truncate(length)
 
     def write(self, path, data, offset, fh):
-        it = self.caches[path]
-        it.write(data, offset)
-        node = self.tree.get(path)
-        node.attribute.set_size(offset + len(data))
-        return len(data)
+        return self.caches[path].write(data, offset)
 
     def flush(self, path, fh):
-        self.caches[path].flush(path, self.kp)
-        node = self.tree.get(path)
-        node.attribute.update()
+        self.caches.flush(path)
         return 0
 
     def create(self, path, mode=0644, fi=None):
-        self.caches.add(path)
-        self.tree.create(path, False)
-        name = os.path.basename(path)
-        if name.startswith('.~') or name.startswith('~'):
-            return 0
-        self.kp.upload(path, '', True)
+        self.caches.create(path)
         return 0
