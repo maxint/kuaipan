@@ -24,8 +24,8 @@ def setup_logging(default_path='logging.json',
         logging.basicConfig(level=default_level)
 
 
-def remove_log_handler(log, handler_name):
-    assert isinstance(log, logging.Logger)
+def remove_log_handler(log_name, handler_name):
+    log = logging.getLogger(log_name)
     for h in filter(lambda x: x.name == handler_name, log.handlers):
         log.removeHandler(h)
         break

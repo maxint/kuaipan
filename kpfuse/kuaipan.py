@@ -10,6 +10,7 @@ import os
 from urllib import quote
 
 from requests_oauthlib import OAuth1Session
+from requests import Response
 
 
 API_VERSION = 1
@@ -73,13 +74,14 @@ class Kuaipan():
         else:
             return url
 
-    def get(self, url, api='API', path=None, **kargs):
+    def get(self, url, api='API', path=None, **kwargs):
         url = self.build_url(url, api, path)
-        r = self.oauth.get(url, **kargs)
+        r = self.oauth.get(url, **kwargs)
+        assert isinstance(r, Response)
         if r.status_code == 200:
             return r
         else:
-            raise Exception()
+            raise Exception(r.content)
 
     def account_info(self):
         return self.get('account_info').json()

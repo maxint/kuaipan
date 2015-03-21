@@ -10,6 +10,7 @@ import kuaipan
 import oauth_callback
 import version
 from error import setup_logging
+from error import remove_log_handler
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +45,9 @@ def main():
 
     args = parser.parse_args()
 
-    if args.verbose:
-        setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
+    setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
+    if not args.verbose:
+        remove_log_handler('kpfuse', 'console')
 
     log.info('Mount point: %s', args.mount_point)
 

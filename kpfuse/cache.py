@@ -60,9 +60,9 @@ class FileCache():
 
 
 class CachePool():
-    def __init__(self, pooldir=None):
+    def __init__(self, pool_dir=None):
         self.data = dict()
-        self.pooldir = pooldir
+        self.pool_dir = pool_dir
 
     def get(self, path):
         return self.data.get(path)
@@ -70,9 +70,9 @@ class CachePool():
     def __getitem__(self, path):
         return self.get(path)
 
-    def add(self, path, r=None, tsize=0):
+    def add(self, path, r=None, size=0):
         if path not in self.data:
-            c = FileCache(r, tsize)
+            c = FileCache(r, size)
             self.data[path] = c
             return c
         else:
