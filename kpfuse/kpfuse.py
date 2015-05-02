@@ -10,6 +10,7 @@ import os
 import errno
 import fuse
 import logging
+import threading
 
 import cache
 from .node import NodeTree
@@ -18,18 +19,20 @@ log = logging.getLogger(__name__)
 
 
 class LoggingMixIn:
+    log = logging.getLogger('kpfuse.log-mixin')
+
     def __call__(self, op, path, *args):
-        log.debug('-> %s: %s (%s)', op, path, ','.join(map(str, args)))
+        log.debug('-> %s: %s (%s) [%s]', op, path, ','.join(map(str, args)), threading.current_thread().name)
         ret = '[Unhandled Exception]'
         try:
             ret = getattr(self, op)(path, *args)
             return ret
         except OSError, e:
             ret = str(e)
-            raise
+            raise fuse.FuseOSError(errno.EFAULT)
         finally:
             def cap_string(s, l):
-                return s if len(s) < l else s[0:l - 3] + '...'
+                return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
 
             if isinstance(ret, str) and len(ret) > 1024:
                 msg = cap_string(repr(ret[:10]), 10)
@@ -42,61 +45,95 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
     def __init__(self, kp, pool_dir):
         self.kp = kp
         self.tree = NodeTree(kp)
-        self.caches = cache.CachePool(self.tree, pool_dir)
+        cache_dir = os.path.join(pool_dir, 'object')
+        self.fd = 0
+        self.fd_map = dict()
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+        self.caches = cache.CachePool(self.tree, cache_dir)
+
+    def _get_fd(self, c):
+        if len(self.fd_map) != 0:
+            self.fd += 1
+        self.fd_map[self.fd] = c
+        return self.fd
 
     # ----------------------------------------------------
 
     def access(self, path, amode):
+        # whether path is accessible?
         return 0
 
     def getattr(self, path, fh=None):
+        # get attribute of file or directory
         node = self.tree.get(path)
         if not node:
             raise fuse.FuseOSError(errno.ENOENT)
         return node.attribute.get()
 
+    def getxattr(self, path, name, position=0):
+        return ''
+
     def readdir(self, path, fh):
+        # return name list in directory
         node = self.tree.get(path)
         if not node:
             raise fuse.FuseOSError(errno.ENOENT)
-        return node.names()
+        return ['.', '..'] + node.names()
 
     def rename(self, old, new):
+        # rename file or directory
         self.kp.move(old, new)
         self.tree.move(old, new)
+        self.caches.move(old, new)
 
     def mkdir(self, path, mode=0644):
+        # create directory
         self.kp.mkdir(path)
         self.tree.create(path, True)
 
     def rmdir(self, path):
+        # remove directory
         self.kp.delete(path)
         self.tree.remove(path)
 
     def unlink(self, path):
+        # remove file or directory
         self.rmdir(path)
-        self.caches.remove(path)
+        self.caches.close(path)
+
+    def create(self, path, mode=0644, fi=None):
+        # create file
+        c = self.caches.create(path)
+        return self._get_fd(c)
 
     def open(self, path, flags):
-        self.caches.open(path)
-        return 0
+        # open file for reading or writing
+        c = self.caches.open(path, flags)
+        return self._get_fd(c)
 
     def release(self, path, fh):
+        # close file
+        self.caches.close(path)
+        self.fd_map.pop(fh)
         return 0
 
     def read(self, path, size, offset, fh):
-        return self.caches[path].read(size, offset)
-
-    def truncate(self, path, length, fh=None):
-        return self.caches[path].truncate(length)
+        # read data from file
+        c = self.fd_map[fh]
+        return c.read(size, offset)
 
     def write(self, path, data, offset, fh):
-        return self.caches[path].write(data, offset)
+        # write date to file
+        c = self.fd_map[fh]
+        return c.write(data, offset)
+
+    def truncate(self, path, length, fh=None):
+        # truncate data in file
+        c = self.caches.get(path) if fh is None else self.fd_map[fh]
+        return c.truncate(length)
 
     def flush(self, path, fh):
-        self.caches.flush(path)
-        return 0
-
-    def create(self, path, mode=0644, fi=None):
-        self.caches.create(path)
+        # flush file data to disk
+        self.fd_map[fh].flush()
         return 0

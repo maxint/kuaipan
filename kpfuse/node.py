@@ -88,7 +88,7 @@ class DirNode(AbstractNode):
 
     def names(self):
         self.build()
-        return self.nodes.keys() + ['.', '..']
+        return self.nodes.keys()
 
     def build(self):
         if self.valid:

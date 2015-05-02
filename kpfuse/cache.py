@@ -10,62 +10,80 @@ import threading
 
 from .node import FileNode
 from .node import NodeTree
+from .kuaipan import Kuaipan
 
 log = logging.getLogger(__name__)
 
 
+class MemoryCache():
+    def __init__(self, raw):
+        self.raw = raw
+
+
 class FileCache():
-    def __init__(self, node, r=None):
+    def __init__(self, node, cached_path):
         assert isinstance(node, FileNode)
         self.node = node
-        self.raw = r.raw if r else None
-        self.data = bytes()
-        self.total = node.attribute.size
+        self.cached_path = cached_path
+        self.raw = None
         self.modified = False
-        self.lock = threading.Lock() if r else None
+        self.lock = threading.Lock()
+        self.data = ''
+        self.ref_count = 0
 
-    def readable(self):
-        return self.raw and self.raw.readable()
+    def open(self, kp, flags):
+        assert self.raw is None
+        assert isinstance(kp, Kuaipan)
+        if len(self.data) != self.node.attribute.size:
+            log.warn('reload from net (%d %d)', len(self.data), self.node.attribute.size)
+            self.data = ''
+            self.raw = kp.download(self.node.path).raw
 
-    def size(self):
-        return len(self.data)
-
-    def _read(self, total):
-        bufsz = self.size()
-        if bufsz < total and self.readable():
-            try:
-                self.data += self.raw.read(total - bufsz)
-            except (StopIteration, ValueError):
-                self.raw.close()
-                self.raw = None
-                self.lock = None
+    def create(self):
+        assert self.raw is None
 
     def read(self, size, offset):
-        total = size + offset
-        # add multiple thread protection for reading
-        if self.lock:
-            with self.lock:
-                self._read(total)
-        fsize = min(total, self.size())
-        return self.data[offset:fsize]
+        with self.lock:
+            if self.raw and len(self.data) < size + offset:
+                total = size + offset
+                read_size = total - len(self.data)
+                if read_size > 0:
+                    self.data += self.raw.read(read_size)
+                    if not self.raw.readable():
+                        self.raw.close()
+                        self.raw = None
+
+            return self.data[offset:offset+size]
 
     def truncate(self, length):
-        if len(self.data) != length:
-            self.data = self.data[:length]
-            self.modified = True
-            self.node.attribute.set_size(length)
+        with self.lock:
+            if self.node.attribute.size != length:
+                self.data = self.data[:length]
+                self.modified = True
+                self.node.attribute.set_size(length)
 
     def write(self, data, offset):
-        self.data = self.data[:offset] + data
-        self.modified = True
-        self.node.attribute.set_size(len(self.data))
-        return len(data)
+        with self.lock:
+            self.modified = True
+            self.data = self.data[:offset] + data
+            self.node.attribute.set_size(len(self.data))
+            return len(data)
 
-    def flush(self, path, kp):
-        if self.modified:
-            log.debug("upload: %s", path)
-            kp.upload(path, self.data, True)
-            self.modified = False
+    def flush(self):
+        pass
+
+    def close(self, kp):
+        log.info('closing %s', self.node.path)
+        with self.lock:
+            if self.modified:
+                assert len(self.data) == self.node.attribute.size
+                assert isinstance(kp, Kuaipan)
+                # TODO: upload in background pool
+                log.info("upload: %s", self.node.path)
+                kp.upload(self.node.path, self.data, True)
+                self.modified = False
+            if self.raw:
+                self.raw.close()
 
 
 class CachePool():
@@ -76,49 +94,67 @@ class CachePool():
         self.tree = tree
         self.kp = tree.kp
         self.pool_dir = pool_dir
+        self.clear_old_files()
 
-    def __getitem__(self, path):
-        c = self.data[path]
-        assert isinstance(c, FileCache)
-        return c
+    def clear_old_files(self, passed_day=30):
+        import time
+        time_threshold = time.time() - passed_day * 60 * 60 * 24
+        log.debug('remove files elder than %d days', passed_day)
+        for name in os.listdir(self.pool_dir):
+            path = os.path.join(self.pool_dir, name)
+            if os.path.getmtime(path) < time_threshold:
+                log.debug('remove old cache file %s', path)
+                os.remove(path)
 
-    def __contains__(self, path):
-        return path in self.data
+    def _get_cached_file(self, path):
+        import hashlib
+        m = hashlib.md5()
+        m.update(path.encode('utf-8'))
+        return os.path.join(self.pool_dir, m.hexdigest())
 
     def get(self, path):
-        return self.data.get(path)
+        assert path in self.data
+        return self.data[path]
 
-    def open(self, path):
+    def open(self, path, flags):
         if path in self.data:
-            return self.data[path]
+            c = self.data[path]
+        else:
+            node = self.tree.get(path)
+            c = FileCache(node, self._get_cached_file(path))
+            c.open(self.kp, flags)
+            self.data[path] = c
 
-        node = self.tree.get(path)
-        r = self.kp.download(path)
-        c = FileCache(node, r)
-        self.data[path] = c
-
+        c.ref_count += 1
         return c
 
     def create(self, path):
         if path in self.data:
-            return self.data[path]
+            c = self.data[path]
+        else:
+            node = self.tree.create(path, False)
+            name = os.path.basename(path)
+            if not name.startswith('.~') and not name.startswith('~'):
+                # TODO: remove it?
+                self.kp.upload(path, '', True)
 
-        node = self.tree.create(path, False)
-        name = os.path.basename(path)
-        if not name.startswith('.~') and not name.startswith('~'):
-            # TODO: remove it?
-            self.kp.upload(path, '', True)
+            c = FileCache(node, self._get_cached_file(path))
+            c.create()
+            self.data[path] = c
 
-        c = FileCache(node)
-        self.data[path] = c
+        c.ref_count += 1
 
         return c
 
-    def flush(self, path):
-        c = self.data[path]
-        assert isinstance(c, FileCache)
-        c.flush(path, self.kp)
-        c.node.attribute.update()
+    def close(self, path):
+        c = self.get(path)
+        c.ref_count -= 1
+        if c.ref_count == 0:
+            c = self.data.pop(path, None)
+            c.close(self.kp)
 
-    def remove(self, path):
-        self.data.pop(path, None)
+    def move(self, old, new):
+        old_cache_path = self._get_cached_file(old)
+        if os.path.isfile(old_cache_path):
+            new_cache_path = self._get_cached_file(new)
+            os.rename(old_cache_path, new_cache_path)
