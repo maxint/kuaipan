@@ -29,7 +29,8 @@ class LoggingMixIn:
             return ret
         except OSError, e:
             ret = str(e)
-            raise fuse.FuseOSError(errno.EFAULT)
+            raise
+            # raise fuse.FuseOSError(errno.EFAULT)
         finally:
             def cap_string(s, l):
                 return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
@@ -100,7 +101,6 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
     def unlink(self, path):
         # remove file or directory
         self.rmdir(path)
-        self.caches.close(path)
 
     def create(self, path, mode=0644, fi=None):
         # create file

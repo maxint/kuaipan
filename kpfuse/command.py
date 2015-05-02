@@ -78,7 +78,7 @@ def launch(mount_point, username, foreground=False, verbose=False):
               uid=os.getuid(),
               gid=os.getgid(),
               nonempty=True,
-              nothreads=True,  # on multiple thread
+              nothreads=False,  # on multiple thread
               ro=False)  # readonly
 
 

@@ -13,7 +13,7 @@ with open('kpfuse/version.py') as f:
 setup(name='kpfuse',
       version=version['__version__'],
       description='FUSE File System for Cloud Drive in kuaipan.cn',
-      long_description=open('README.md').read(),
+      long_description=version['__changes__'] + open('README.md').read(),
       keywords=['Cloud Drive', 'FUSE', 'File System'],
       author=version['__author__'],
       author_email=version['__email__'],
