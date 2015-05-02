@@ -50,17 +50,17 @@ class Kuaipan():
 
     def save(self, filename):
         with open(filename, 'wt') as f:
-            c = self.oauth._client.client
+            cc = self.oauth._client.client
             f.write(json.dumps({
-                'client_key': c.client_key,
-                'client_secret': c.client_secret,
-                'resource_owner_key': c.resource_owner_key,
-                'resource_owner_secret': c.resource_owner_secret,
+                'client_key': cc.client_key,
+                'client_secret': cc.client_secret,
+                'resource_owner_key': cc.resource_owner_key,
+                'resource_owner_secret': cc.resource_owner_secret,
                 'root': self.root
             }))
 
     def build_url(self, url, api='API', path=None):
-        HOSTS = {
+        hosts = {
             'API': API_HOST,
             'CONV': CONV_HOST,
             'CONTENT': CONTENT_HOST,
@@ -69,8 +69,8 @@ class Kuaipan():
             if isinstance(path, unicode):
                 path = path.encode('utf-8')
             url = os.path.join(url, self.root, quote(path.strip('/')))
-        if api in HOSTS:
-            return os.path.join(HOSTS.get(api, ''), str(API_VERSION), url)
+        if api in hosts:
+            return os.path.join(hosts.get(api, ''), str(API_VERSION), url)
         else:
             return url
 
@@ -132,7 +132,7 @@ class Kuaipan():
             'root': self.root,
             'from_path': from_path,
             'to_path': to_path,
-            'to_path': to_path,
+            'from_copy_ref': from_copy_ref,
         })
 
     def copy_ref(self, path):
@@ -165,9 +165,9 @@ class Kuaipan():
         }, stream=True)
 
     def thumbnail(self, width, height, path):
-        '''
+        """
         TYPE_IMG = ('gif', 'png', 'jpg', 'bmp', 'jpeg', 'jpe')
-        '''
+        """
         return self.get('fileops/thumbnail', api='CONV', params={
             'root': self.root,
             'path': path,
@@ -176,14 +176,14 @@ class Kuaipan():
         })
 
     def document_view(self, doctype, view, path, iszip=False):
-        '''
+        """
         doctype = {
             'pdf', 'doc', 'wps', 'csv', 'prn',
             'xls', 'et', 'ppt', 'dps', 'txt', 'rtf'
         }
         view = {'normal', 'android', 'iPad', 'iphone'}
         zip = {0, 1}
-        '''
+        """
         return self.get('fileops/documentView', api='CONV', params={
             'root': self.root,
             'path': path,
@@ -210,7 +210,7 @@ if __name__ == '__main__':
     try:
         c = load(CACHED_KEYFILE)
     except:
-        def authoriseCallback(url):
+        def authorise_callback(url):
             import webbrowser
 
             webbrowser.open(url)
@@ -219,7 +219,7 @@ if __name__ == '__main__':
         CONSUMER_KEY = 'xcNBQcp5oxmRanaC'
         CONSUMER_SECRET = 'ilhYuLMWpyVDaLm4'
         c = Kuaipan(CONSUMER_KEY, CONSUMER_SECRET)
-        c.authorise(authoriseCallback)
+        c.authorise(authorise_callback)
         c.save(CACHED_KEYFILE)
 
     fname = os.path.basename(__file__)
