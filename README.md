@@ -46,4 +46,4 @@ kpfs -h
 # Debug
 
 Logging is enabled by default. The log file locates at `/tmp/kpfuse.log`.
-If you has issues, please upload the log file as attachment.
+If you has any issue, please upload the log file as attachment.
