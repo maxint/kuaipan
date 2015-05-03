@@ -6,7 +6,7 @@ FUSE file system for kuaipan.cn. Access the cloud data in kuaipan.cn as local di
 # Features
 
 - Access cloud data as local data without download data manually.
-- Local file cache to speed up access performance. (files elder than 30 days would be deleted)
+- Local file cache to speed up access performance.
 - Support multiple accounts.
 
 
@@ -47,3 +47,8 @@ kpfs -h
 
 Logging is enabled by default. The log file locates at `/tmp/kpfuse.log`.
 If you has any issue, please upload the log file as attachment.
+
+
+# Local Cache
+
+The account data and local cache files are stored at `~/.kpfuse`. Cache files that elder than 30 days would be deleted.
