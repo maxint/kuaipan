@@ -54,47 +54,46 @@ class FileNodeAttribute(DirNodeAttribute):
 
 
 class AbstractNode(object):
-    def __init__(self, kp, path):
-        self.kp = kp
+    def __init__(self, path):
         self.path = path
         self.attribute = None
 
 
 class FileNode(AbstractNode):
-    def __init__(self, kp, path):
-        super(FileNode, self).__init__(kp, path)
+    def __init__(self, path):
+        super(FileNode, self).__init__(path)
         self.attribute = FileNodeAttribute()
 
 
 class DirNode(AbstractNode):
-    def __init__(self, kp, path, nodes=None):
-        super(DirNode, self).__init__(kp, path)
+    def __init__(self, path, nodes=None):
+        super(DirNode, self).__init__(path)
         self.attribute = DirNodeAttribute()
         self.valid = nodes is not None
         self.nodes = dict() if nodes is None else nodes
 
     def insert(self, name, node):
-        self.build()
+        assert self.valid
         self.nodes[name] = node
 
     def remove(self, name):
-        self.build()
+        assert self.valid
         node = self.nodes.pop(name)
         return node
 
     def get(self, name):
-        self.build()
+        assert self.valid
         return self.nodes.get(name)
 
     def names(self):
-        self.build()
+        assert self.valid
         return self.nodes.keys()
 
-    def build(self):
+    def build(self, kp):
         if self.valid:
             return
 
-        meta = self.kp.metadata(self.path)
+        meta = kp.metadata(self.path)
         assert meta, 'Could not find directory {} at server'.format(self.path)
         assert meta.get('path') == '/' or meta['type'] == 'folder'
 
@@ -102,7 +101,7 @@ class DirNode(AbstractNode):
         for x in meta.get('files', []):
             child_name = x['name']
             child_path = self.path + '/' + child_name
-            child_node = FileNode(self.kp, child_path) if x['type'] == 'file' else DirNode(self.kp, child_path)
+            child_node = FileNode(child_path) if x['type'] == 'file' else DirNode(child_path)
             child_node.attribute = create_stat(x)
             children_nodes[child_name] = child_node
 
@@ -130,7 +129,7 @@ class NodeTree:
     def __init__(self, kp):
         assert isinstance(kp, Kuaipan)
         self.kp = kp
-        self.tree = DirNode(self.kp, '/')
+        self.tree = DirNode('/')
 
     def get(self, path):
         if path == '/':
@@ -143,13 +142,13 @@ class NodeTree:
                 return node
 
             assert isinstance(node, DirNode)
-            node.build()
+            node.build(self.kp)
             node = node.get(name)
 
         return node
 
     def create(self, path, isdir):
-        node = DirNode(self.kp, path, dict()) if isdir else FileNode(self.kp, path)
+        node = DirNode(path, dict()) if isdir else FileNode(path)
         self.insert(path, node)
         return node
 
