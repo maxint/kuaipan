@@ -1,6 +1,13 @@
 # Kuaipan FUSE FileSystem
 
-FUSE file system for kuaipan.cn
+FUSE file system for kuaipan.cn. Access the cloud data in kuaipan.cn as local disk data.
+
+
+# Features
+
+- Access cloud data as local data without download data manually.
+- Local file cache to speed up access performance. (files elder than 30 days would be deleted)
+- Support multiple accounts.
 
 
 # Install
@@ -34,3 +41,9 @@ Help:
 ```
 kpfs -h
 ```
+
+
+# Debug
+
+Logging is enabled by default. The log file locates at `/tmp/kpfuse.log`.
+If you has issues, please upload the log file as attachment.
