@@ -38,15 +38,15 @@ class FileCache():
         :type kp: KuaiPan
         """
         assert self.raw is None
-        log.info('opening %s (refcount=%d)', self.node.path.encode('utf-8'), self.ref_count)
+        log.info(u'opening %s (refcount=%d)', self.node.path, self.ref_count)
         if not os.path.exists(self.cached_path) or os.path.getmtime(self.cached_path) < self.node.attribute.mtime:
             if len(self.data) != self.node.attribute.size:
-                log.info('from net %s (size=%d -> %d)', self.node.path.encode('utf-8'),
+                log.info(u'from net %s (size=%d -> %d)', self.node.path,
                          len(self.data), self.node.attribute.size)
                 self.data = ''
                 self.raw = kp.download(self.node.path).raw
         else:
-            log.info('open cache %s, mtime(%s -> %s)', self.node.path.encode('utf-8'),
+            log.info(u'open cache %s, mtime(%s -> %s)', self.node.path,
                      os.path.getmtime(self.cached_path), self.node.attribute.mtime)
             self.fh = os.open(self.cached_path, flags)
 
@@ -64,7 +64,8 @@ class FileCache():
                 read_size = total - len(self.data)
                 if read_size > 0:
                     self.data += self.raw.read(read_size)
-                    if not self.raw.readable():
+                    if not self.raw.readable() or len(self.data) == self.node.attribute.size:
+                        # complete download
                         self.raw.close()
                         self.raw = None
 
@@ -119,8 +120,9 @@ class FileCache():
                     self.raw.close()
 
             if not os.path.exists(self.cached_path) or self.modified:
-                if self.fh is None and not self.modified and len(self.data) == self.node.attribute.size:
-                    # only save cache file when downloaded data is completed
+                if self.fh is None and (self.modified or self.raw is None):
+                    # only save cache file when downloaded data is completed or modified
+                    log.info(u'writing %s to cache', self.node.path)
                     with open(self.cached_path, 'wb') as f:
                         f.write(self.data)
                 if os.path.exists(self.cached_path):
