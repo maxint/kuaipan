@@ -1,6 +1,6 @@
 # coding: utf-8
 
-__version__ = '0.2'
+__version__ = '0.3'
 
 __author__ = 'maxint'
 __email__ = 'lnychina@gmail.com'
@@ -12,6 +12,10 @@ __status__ = '3 - Alpha'
 
 __changes__ = '''
 # Change Logs
+v0.3
+- Add local file cache.
+- Fix some bugs.
+
 v0.2
 - Disable cache of closed files temporarily.
 - Fix bug of wrong data when opening large file.

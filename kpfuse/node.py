@@ -128,6 +128,9 @@ class NodeTree:
         self.tree = DirNode('/')
 
     def get(self, path):
+        """
+        :rtype: DirNode
+        """
         if path == '/':
             return self.tree
 
@@ -143,11 +146,17 @@ class NodeTree:
         return node
 
     def create(self, path, isdir):
+        """
+        :rtype: AbstractNode
+        """
         node = DirNode(path, dict()) if isdir else FileNode(path)
         self.insert(path, node)
         return node
 
     def remove(self, path):
+        """
+        :rtype: AbstractNode
+        """
         dir_path, base_name = os.path.split(path)
         node = self.get(dir_path)
         if node:
@@ -163,5 +172,6 @@ class NodeTree:
     def move(self, path, new_path):
         node = self.remove(path)
         if node:
+            node.path = new_path
             self.insert(new_path, node)
         return node

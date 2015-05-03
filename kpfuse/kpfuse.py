@@ -22,24 +22,32 @@ class LoggingMixIn:
     log = logging.getLogger('kpfuse.log-mixin')
 
     def __call__(self, op, path, *args):
-        log.debug('-> %s: %s (%s) [%s]', op, path, ','.join(map(str, args)), threading.current_thread().name)
-        ret = '[Unhandled Exception]'
         try:
-            ret = getattr(self, op)(path, *args)
-            return ret
-        except OSError, e:
-            ret = str(e)
-            raise
-            # raise fuse.FuseOSError(errno.EFAULT)
-        finally:
-            def cap_string(s, l):
-                return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
+            log.debug(u'-> %s: %s (%s) [%s]', op, path,
+                      ','.join(map(str, args)),
+                      threading.current_thread().name)
+            ret = '[Unhandled Exception]'
+            try:
+                ret = getattr(self, op)(path, *args)
+                return ret
+            except OSError, e:
+                ret = str(e)
+                raise
+                # raise fuse.FuseOSError(errno.EFAULT)
+            finally:
+                def cap_string(s, l):
+                    return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
 
-            if isinstance(ret, str) and len(ret) > 1024:
-                msg = cap_string(repr(ret[:10]), 10)
-            else:
-                msg = repr(ret)
-            log.debug('<- %s: %s %s', op, path, msg)
+                if isinstance(ret, str) and len(ret) > 1024:
+                    msg = cap_string(repr(ret[:10]), 10)
+                else:
+                    msg = repr(ret)
+                log.debug('<- %s: %s %s', op, path, msg)
+        except fuse.FuseOSError, e:
+            raise
+        except:
+            log.exception('__call__ exception')
+            raise
 
 
 class KuaipanFuse(LoggingMixIn, fuse.Operations):
@@ -49,6 +57,7 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
         cache_dir = os.path.join(pool_dir, 'object')
         self.fd = 0
         self.fd_map = dict()
+        self.rwlock = threading.Lock()
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         self.caches = cache.CachePool(self.tree, cache_dir)
@@ -84,19 +93,22 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
 
     def rename(self, old, new):
         # rename file or directory
-        self.kp.move(old, new)
-        self.tree.move(old, new)
-        self.caches.move(old, new)
+        with self.rwlock:
+            self.kp.move(old, new)
+            self.tree.move(old, new)
+            self.caches.move(old, new)
 
     def mkdir(self, path, mode=0644):
         # create directory
-        self.kp.mkdir(path)
-        self.tree.create(path, True)
+        with self.rwlock:
+            self.kp.mkdir(path)
+            self.tree.create(path, True)
 
     def rmdir(self, path):
         # remove directory
-        self.kp.delete(path)
-        self.tree.remove(path)
+        with self.rwlock:
+            self.kp.delete(path)
+            self.tree.remove(path)
 
     def unlink(self, path):
         # remove file or directory
@@ -104,19 +116,22 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
 
     def create(self, path, mode=0644, fi=None):
         # create file
-        c = self.caches.create(path)
-        return self._get_fd(c)
+        with self.rwlock:
+            c = self.caches.create(path)
+            return self._get_fd(c)
 
     def open(self, path, flags):
         # open file for reading or writing
-        c = self.caches.open(path, flags)
-        return self._get_fd(c)
+        with self.rwlock:
+            c = self.caches.open(path, flags)
+            return self._get_fd(c)
 
     def release(self, path, fh):
         # close file
-        self.caches.close(path)
-        self.fd_map.pop(fh)
-        return 0
+        with self.rwlock:
+            self.caches.close(path)
+            self.fd_map.pop(fh)
+            return 0
 
     def read(self, path, size, offset, fh):
         # read data from file
@@ -130,8 +145,9 @@ class KuaipanFuse(LoggingMixIn, fuse.Operations):
 
     def truncate(self, path, length, fh=None):
         # truncate data in file
-        c = self.caches.get(path) if fh is None else self.fd_map[fh]
-        return c.truncate(length)
+        with self.rwlock:
+            c = self.caches.get(path) if fh is None else self.fd_map[fh]
+            return c.truncate(length)
 
     def flush(self, path, fh):
         # flush file data to disk

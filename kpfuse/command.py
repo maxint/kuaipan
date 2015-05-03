@@ -107,7 +107,10 @@ def main():
 
     args = parser.parse_args()
 
-    launch(**vars(args))
+    try:
+        launch(**vars(args))
+    except:
+        log.exception('kpfuse command failed')
 
 
 if __name__ == "__main__":

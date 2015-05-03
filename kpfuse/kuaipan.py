@@ -138,6 +138,9 @@ class KuaiPan():
         return self.get('copy_ref', path=path).json()
 
     def upload(self, path, data, overwrite=True, source_ip=None):
+        """
+        :param data: file object or str data.
+        """
         host = self.get('fileops/upload_locate', api='CONTENT', params={
             'source_ip': source_ip
         }).json().get('url')
