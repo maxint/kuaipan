@@ -51,4 +51,7 @@ If you has any issue, please upload the log file as attachment.
 
 # Local Cache
 
-The account data and local cache files are stored at `~/.kpfuse`. Cache files that elder than 30 days would be deleted.
+The account data and local cache files are stored at `~/.kpfuse`. 
+Cache files that elder than 30 days would be deleted.
+You could also clean the cache objects in `~/.kpfuse/<account email>/object/` manually, when local cache occupied too much disk space
+or cache objects are corrupted (when bugs existed).
