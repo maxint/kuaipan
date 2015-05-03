@@ -3,7 +3,7 @@
 import os
 import stat
 import time
-from kuaipan import Kuaipan
+from kuaipan import KuaiPan
 
 
 class DirNodeAttribute(object):
@@ -21,11 +21,6 @@ class DirNodeAttribute(object):
         self.nlink = 2
         self.mode = stat.S_IFDIR | 0644
         self.ctime = ctime
-        self.mtime = mtime
-
-    def update(self, mtime=None):
-        if mtime is None:
-            mtime = time.time()
         self.mtime = mtime
 
     def get(self):
@@ -48,15 +43,16 @@ class FileNodeAttribute(DirNodeAttribute):
         d.update(dict(st_size=self.size))
         return d
 
-    def set_size(self, size):
-        self.size = size
-        self.update()
-
 
 class AbstractNode(object):
     def __init__(self, path):
         self.path = path
         self.attribute = None
+
+    def update_meta(self, kp):
+        """Update meta information for node"""
+        meta = kp.metadata(self.path)
+        self.attribute = create_stat(meta)
 
 
 class FileNode(AbstractNode):
@@ -127,7 +123,7 @@ def create_stat(meta):
 
 class NodeTree:
     def __init__(self, kp):
-        assert isinstance(kp, Kuaipan)
+        assert isinstance(kp, KuaiPan)
         self.kp = kp
         self.tree = DirNode('/')
 
@@ -140,8 +136,7 @@ class NodeTree:
         for name in names:
             if node is None or isinstance(node, FileNode):
                 return node
-
-            assert isinstance(node, DirNode)
+            """:type: DirNode"""
             node.build(self.kp)
             node = node.get(name)
 
@@ -161,7 +156,7 @@ class NodeTree:
     def insert(self, path, node):
         dir_path, base_name = os.path.split(path)
         parent_node = self.get(dir_path)
-        assert isinstance(parent_node, DirNode)
+        """:type: DirNode"""
         if parent_node:
             parent_node.insert(base_name, node)
 

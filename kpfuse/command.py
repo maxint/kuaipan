@@ -52,7 +52,7 @@ def launch(mount_point, username, foreground=False, verbose=False):
             log.warn('Can not find user data directory: %s', profile_dir)
 
     if kp is None:
-        kp = kuaipan.Kuaipan('xcNBQcp5oxmRanaC', 'ilhYuLMWpyVDaLm4')
+        kp = kuaipan.KuaiPan('xcNBQcp5oxmRanaC', 'ilhYuLMWpyVDaLm4')
         kp.authorise(oauth_callback.http_authorise)
         username = kp.account_info()['user_name']
         log.debug('Create cached key')

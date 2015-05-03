@@ -10,7 +10,6 @@ import os
 from urllib import quote
 
 from requests_oauthlib import OAuth1Session
-from requests import Response
 
 
 API_VERSION = 1
@@ -20,7 +19,7 @@ CONTENT_HOST = 'http://api-content.dfs.kuaipan.cn/'
 AUTH_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
 
 
-class Kuaipan():
+class KuaiPan():
     def __init__(self,
                  client_key, client_secret,
                  resource_owner_key=None, resource_owner_secret=None,
@@ -77,7 +76,7 @@ class Kuaipan():
     def get(self, url, api='API', path=None, **kwargs):
         url = self.build_url(url, api, path)
         r = self.oauth.get(url, **kwargs)
-        assert isinstance(r, Response)
+        """:type: Response"""
         if r.status_code == 200:
             return r
         else:
@@ -196,7 +195,7 @@ class Kuaipan():
 def load(filename):
     with open(filename, 'rt')as f:
         rs = json.load(f)
-        return Kuaipan(
+        return KuaiPan(
             rs.get('client_key'),
             rs.get('client_secret'),
             rs.get('resource_owner_key'),
@@ -218,7 +217,7 @@ if __name__ == '__main__':
 
         CONSUMER_KEY = 'xcNBQcp5oxmRanaC'
         CONSUMER_SECRET = 'ilhYuLMWpyVDaLm4'
-        c = Kuaipan(CONSUMER_KEY, CONSUMER_SECRET)
+        c = KuaiPan(CONSUMER_KEY, CONSUMER_SECRET)
         c.authorise(authorise_callback)
         c.save(CACHED_KEYFILE)
 
