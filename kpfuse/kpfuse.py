@@ -38,7 +38,7 @@ class LoggingMixIn:
                 def cap_string(s, l):
                     return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
 
-                if isinstance(ret, str) and len(ret) > 1024:
+                if isinstance(ret, str) and len(ret) > 128:
                     msg = cap_string(repr(ret[:10]), 10)
                 else:
                     msg = repr(ret)
