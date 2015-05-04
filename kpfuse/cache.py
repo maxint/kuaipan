@@ -7,6 +7,7 @@ Local cache for FuseFS
 import os
 import logging
 import threading
+import time
 
 from .node import FileNode
 from .node import NodeTree
@@ -27,7 +28,7 @@ class FileCache():
         self.cached_path = cached_path
         self.raw = None
         self.fh = None
-        self.modified = False
+        self.modified = 0
         self.lock = threading.Lock()
         self.data = ''
         # reference count is needed, as file may be opened more than once.
@@ -39,20 +40,23 @@ class FileCache():
         """
         assert self.raw is None
         log.info(u'opening %s (refcount=%d)', self.node.path, self.ref_count)
-        if not os.path.exists(self.cached_path) or os.path.getmtime(self.cached_path) < self.node.attribute.mtime:
+        cache_mtime = os.path.getmtime(self.cached_path) if os.path.exists(self.cached_path) else 0
+        if cache_mtime < self.node.attribute.mtime:
             if len(self.data) != self.node.attribute.size:
                 log.info(u'from net %s (size=%d -> %d)', self.node.path,
                          len(self.data), self.node.attribute.size)
                 self.data = ''
                 self.raw = kp.download(self.node.path).raw
         else:
+            if cache_mtime > self.node.attribute.mtime:
+                self.modified = 2  # previous not-uploaded data
             log.info(u'open cache %s, mtime(%s -> %s)', self.node.path,
                      os.path.getmtime(self.cached_path), self.node.attribute.mtime)
             self.fh = os.open(self.cached_path, flags)
 
     def create(self):
         assert self.raw is None
-        self.modified = True
+        self.modified = 1
 
     def read(self, size, offset):
         with self.lock:
@@ -75,23 +79,26 @@ class FileCache():
         with self.lock:
             if self.fh is not None:
                 os.ftruncate(self.fh, length)
-                self.modified = True
+                self.modified = 1
             elif len(self.data) != length:
                 self.data = self.data[:length]
-                self.modified = True
+                self.modified = 1
 
     def write(self, data, offset):
         with self.lock:
-            self.modified = True
+            self.modified = 1
             if self.fh is not None:
                 os.lseek(self.fh, offset, 0)
                 return os.write(self.fh, data)
             else:
+                if self.raw:
+                    self.raw.close()
+                    self.raw = None
                 self.data = self.data[:offset] + data
                 return len(data)
 
     def flush(self):
-        if self.fh is not None and self.modified:
+        if self.fh is not None and self.modified == 1:
             os.fsync(self.fh)
 
     def close(self, kp):
@@ -108,7 +115,7 @@ class FileCache():
             if self.modified:
                 # TODO: upload in background pool
                 log.info("upload: %s", self.node.path)
-                if self.fh is not None:
+                if self.fh is not None or self.modified == 2:
                     os.close(self.fh)
                     kp.upload(self.node.path, open(self.cached_path, 'rb'), True)
                 else:
@@ -116,8 +123,8 @@ class FileCache():
 
                 self.node.update_meta(kp)
 
-                if self.raw:
-                    self.raw.close()
+            if self.raw:
+                self.raw.close()
 
             if not os.path.exists(self.cached_path) or self.modified:
                 if self.fh is None and (self.modified or self.raw is None):
@@ -127,8 +134,8 @@ class FileCache():
                         f.write(self.data)
                 if os.path.exists(self.cached_path):
                     attribute = self.node.attribute
-                    os.utime(self.cached_path, (attribute.mtime, attribute.mtime))
-            self.modified = False
+                    os.utime(self.cached_path, (time.time(), attribute.mtime))
+            self.modified = 0
 
 
 class CachePool():
