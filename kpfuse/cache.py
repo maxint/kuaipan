@@ -162,7 +162,6 @@ class CachePool():
 
         def remove_if_old(name):
             path = os.path.join(root, name)
-            print(path)
             if os.path.getatime(path) >= time_threshold:
                 return True
             log.warn('remove old cache %s', path)
