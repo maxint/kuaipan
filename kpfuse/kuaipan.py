@@ -10,6 +10,8 @@ import json
 from urllib import quote
 from requests_oauthlib import OAuth1Session
 
+import errors
+
 
 API_VERSION = 1
 API_HOST = 'https://openapi.kuaipan.cn/'
@@ -78,8 +80,12 @@ class KuaiPan(object):
         """:type: Response"""
         if r.status_code == 200:
             return r
+        elif r.status_code == 403:
+            raise errors.FileExistedError(r)
+        elif r.status_code == 404:
+            raise errors.FileNotExistedError(r)
         else:
-            raise Exception(r.content)
+            raise errors.OAuthResponseError(r)
 
     def account_info(self):
         return self.get('account_info').json()
@@ -105,18 +111,26 @@ class KuaiPan(object):
     def history(self, path):
         return self.get('history', path=path).json()
 
-    def mkdir(self, path):
-        return self.get('fileops/create_folder', params={
-            'root': self.root,
-            'path': path,
-        }).json()
+    def mkdir(self, path, force=False):
+        try:
+            return self.get('fileops/create_folder', params={
+                'root': self.root,
+                'path': path,
+            }).json()
+        except errors.FileExistedError:
+            if not force:
+                raise
 
-    def delete(self, path, to_recycle=None):
-        return self.get('fileops/delete', params={
-            'root': self.root,
-            'path': path,
-            'to_recycle': to_recycle,
-        })
+    def delete(self, path, to_recycle=None, force=False):
+        try:
+            return self.get('fileops/delete', params={
+                'root': self.root,
+                'path': path,
+                'to_recycle': to_recycle,
+            })
+        except errors.FileNotExistedError:
+            if not force:
+                raise
 
     def move(self, from_path, to_path):
         return self.get('fileops/move', params={

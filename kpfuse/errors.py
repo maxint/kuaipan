@@ -6,7 +6,20 @@ import logging
 import logging.config
 
 
-class KPFuseError(Exception):
+class OAuthResponseError(Exception):
+    def __init__(self, response=None, description=None):
+        """
+        :type response: requests.Response
+        """
+        super(OAuthResponseError, self).__init__(dict(msg=description or response.content,
+                                                      response=repr(response)))
+
+
+class FileNotExistedError(OAuthResponseError):
+    pass
+
+
+class FileExistedError(OAuthResponseError):
     pass
 
 

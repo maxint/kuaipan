@@ -9,8 +9,8 @@ import kpfuse
 import kuaipan
 import oauth_callback
 import version
-from error import setup_logging
-from error import remove_log_handler
+from errors import setup_logging
+from errors import remove_log_handler
 
 log = logging.getLogger(__name__)
 
