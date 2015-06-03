@@ -143,6 +143,9 @@ class NodeTree:
             node.build(self.kp)
             node = node.get(name)
 
+        if isinstance(node, DirNode):
+            node.build(self.kp)
+
         return node
 
     def create(self, path, isdir):

@@ -53,7 +53,7 @@ class FileCache():
                 self.modified = 2  # previous not-uploaded data
             log.info(u'open cache %s, mtime(%s -> %s)', self.node.path,
                      os.path.getmtime(self.cache_path), self.node.attribute.mtime)
-            self.fh = os.open(self.cache_path, flags | os.R)
+            self.fh = os.open(self.cache_path, flags)
 
     def create(self):
         assert self.raw is None
