@@ -1,6 +1,6 @@
 # coding: utf-8
 
-__version__ = '0.4'
+__version__ = '0.4.1'
 
 __author__ = 'maxint'
 __email__ = 'lnychina@gmail.com'

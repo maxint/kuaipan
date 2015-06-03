@@ -107,7 +107,7 @@ def launch(mount_point, username, foreground=False, verbose=False):
               foreground=foreground,
               uid=os.getuid(),
               gid=os.getgid(),
-              nonempty=True,
+              # nonempty=True, # fuse: unknown option `nonempty' on OS X
               nothreads=False,  # on multiple thread
               ro=False)  # readonly
 
