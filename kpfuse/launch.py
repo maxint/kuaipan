@@ -90,8 +90,8 @@ def save_key_cache(kp, username):
 def launch(mount_point, username, foreground=False, verbose=False):
     setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
     if not verbose:
-        log.debug('Disable console output')
         remove_log_handler('kpfuse', 'console')
+        log.debug('Disable console output')
 
     log.info('Mount point: %s', mount_point)
 
