@@ -141,6 +141,7 @@ def main():
         launch(**vars(args))
     except:
         log.exception('kpfuse command failed')
+        raise
 
 
 if __name__ == "__main__":
