@@ -134,7 +134,7 @@ class NodeTree:
         if path == '/':
             return self.tree
 
-        names = path.strip('/').split('/')
+        names = [x for x in path.split('/') if x]
         node = self.tree
         for name in names:
             if node is None or isinstance(node, FileNode):
