@@ -5,10 +5,9 @@ Kuaipan Python API:
     http://www.kuaipan.cn/developers/document.htm
 """
 
-import json
 import os
+import json
 from urllib import quote
-
 from requests_oauthlib import OAuth1Session
 
 
@@ -19,7 +18,7 @@ CONTENT_HOST = 'http://api-content.dfs.kuaipan.cn/'
 AUTH_URL = 'https://www.kuaipan.cn/api.php?ac=open&op=authorise'
 
 
-class KuaiPan():
+class KuaiPan(object):
     def __init__(self,
                  client_key, client_secret,
                  resource_owner_key=None, resource_owner_secret=None,
@@ -49,14 +48,14 @@ class KuaiPan():
 
     def save(self, filename):
         with open(filename, 'wt') as f:
-            cc = self.oauth._client.client
-            json.dump({
-                'client_key': cc.client_key,
-                'client_secret': cc.client_secret,
-                'resource_owner_key': cc.resource_owner_key,
-                'resource_owner_secret': cc.resource_owner_secret,
-                'root': self.root
-            }, f, indent=2)
+            cc = self.oauth.auth.client
+            json.dump(
+                dict(client_key=cc.client_key,
+                     client_secret=cc.client_secret,
+                     resource_owner_key=cc.resource_owner_key,
+                     resource_owner_secret=cc.resource_owner_secret,
+                     root=self.root),
+                f, indent=2)
 
     def build_url(self, url, api='API', path=None):
         hosts = {
@@ -204,44 +203,3 @@ def load(filename):
             rs.get('resource_owner_key'),
             rs.get('resource_owner_secret'),
             rs.get('root'))
-
-
-if __name__ == '__main__':
-    # Call ipython when raising exception
-    CACHED_KEYFILE = '.cached_kuaipan_key.json'
-    try:
-        c = load(CACHED_KEYFILE)
-    except:
-        def authorise_callback(url):
-            import webbrowser
-
-            webbrowser.open(url)
-            return input('Please input the verifier:')
-
-        CONSUMER_KEY = 'xcNBQcp5oxmRanaC'
-        CONSUMER_SECRET = 'ilhYuLMWpyVDaLm4'
-        c = KuaiPan(CONSUMER_KEY, CONSUMER_SECRET)
-        c.authorise(authorise_callback)
-        c.save(CACHED_KEYFILE)
-
-    fname = os.path.basename(__file__)
-
-    # test
-    print '= account_info:', c.account_info()
-    print '= metadata:', c.metadata('/')
-    print '= upload:', c.upload(fname, open(__file__, 'rb'))
-    print '= upload:', c.upload('tmp.txt', 'hi')
-    print '= metadata:', c.metadata(fname)
-    print '= history:', c.history(fname)  # history not existed
-    print '= shares1', c.shares(fname)
-    print '= shares2:', c.shares(fname, 'test', 'fasdfasdla')
-    print '= mkdir:', c.mkdir('_tmp_')
-    print '= move:', c.move('_tmp_', '_tmp2_')
-    print '= copy:', c.copy('_tmp2_', '_tmp3_')
-    print '= delete1:', c.delete('_tmp2_')
-    print '= delete2:', c.delete('_tmp3_')
-    print '= copy_ref:', c.copy_ref(fname)
-    print '= download:', c.download(fname)
-    print '= thumbnail:', c.thumbnail(128, 128, 'Work/resume/zjg_icon.jpg')
-    print '= document_view:', c.document_view('txt', 'android', fname)
-    print 'Done.'
