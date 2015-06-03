@@ -50,13 +50,13 @@ class KuaiPan():
     def save(self, filename):
         with open(filename, 'wt') as f:
             cc = self.oauth._client.client
-            f.write(json.dumps({
+            json.dump({
                 'client_key': cc.client_key,
                 'client_secret': cc.client_secret,
                 'resource_owner_key': cc.resource_owner_key,
                 'resource_owner_secret': cc.resource_owner_secret,
                 'root': self.root
-            }))
+            }, f, indent=2)
 
     def build_url(self, url, api='API', path=None):
         hosts = {

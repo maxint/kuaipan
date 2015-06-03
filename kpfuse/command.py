@@ -66,8 +66,7 @@ def launch(mount_point, username, foreground=False, verbose=False):
 
     # save last username
     with open(profile_path, 'wt') as f:
-        d = json.dumps(dict(last_username=username))
-        f.write(d)
+        json.dump(dict(last_username=username), f, indent=2)
 
     log.debug('Create KuaipanFuse')
     fuse_op = kpfuse.KuaipanFuse(kp, os.path.expanduser('~/.kpfuse/' + username))
