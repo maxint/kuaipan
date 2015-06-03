@@ -70,7 +70,7 @@ class FileCache():
                 if read_size > 0:
                     self.data += self.raw.read(read_size)
                     if not self.raw.readable() or len(self.data) == self.node.attribute.size:
-                        # complete download
+                        log.debug(u'complete download: %s', self.node.path)
                         self.raw.close()
                         self.raw = None
 
@@ -99,14 +99,14 @@ class FileCache():
                 return len(data)
 
     def flush(self):
-        if self.fh is not None and self.modified == 1:
+        if self.fh is not None and self.modified:
             os.fsync(self.fh)
 
     def close(self, kp):
         """
         :type kp: KuaiPan
         """
-        log.info('closing %s', self.node.path)
+        log.info(u'closing %s', self.node.path)
         with self.lock:
             # ignore temporary files
             name = os.path.basename(self.node.path)
@@ -115,7 +115,7 @@ class FileCache():
 
             if self.modified:
                 # TODO: upload in background pool
-                log.info("upload: %s", self.node.path)
+                log.info(u"upload: %s", self.node.path)
                 if self.fh is not None or self.modified == 2:
                     os.close(self.fh)
                     kp.upload(self.node.path, open(self.cache_path, 'rb'), True)
@@ -124,11 +124,11 @@ class FileCache():
 
                 self.node.update_meta(kp)
 
-            if self.raw:
-                self.raw.close()
-
             if not os.path.exists(self.cache_path) or self.modified:
-                if self.fh is None and (self.modified or self.raw is None):
+                completed = self.node.attribute.size == len(self.data)
+                log.debug(u'data size(attribute:%d, downloaded:%d): %s',
+                          self.node.attribute.size, len(self.data), self.node.path)
+                if (self.fh is None) and (self.modified == 1 or completed):
                     # only save cache file when downloaded data is completed or modified
                     log.info(u'writing %s to cache', self.node.path)
                     cache_dir = os.path.dirname(self.cache_path)
@@ -139,6 +139,10 @@ class FileCache():
                 if os.path.exists(self.cache_path):
                     attribute = self.node.attribute
                     os.utime(self.cache_path, (time.time(), attribute.mtime))
+
+            if self.raw:
+                self.raw.close()
+
             self.modified = 0
 
 
@@ -158,13 +162,13 @@ class CachePool():
         """
         import time
         time_threshold = time.time() - passed_day * 60 * 60 * 24
-        log.info('remove files elder than %d days', passed_day)
+        log.info(u'remove files elder than %d days', passed_day)
 
         def remove_if_old(name):
             path = os.path.join(root, name)
             if os.path.getatime(path) >= time_threshold:
                 return True
-            log.warn('remove old cache %s', path)
+            log.warn(u'remove old cache %s', path)
             if os.path.isfile(path):
                 os.remove(path)
             else:

@@ -101,8 +101,8 @@ class DirNode(AbstractNode):
             child_node.attribute = create_stat(x)
             children_nodes[child_name] = child_node
 
-        self.valid = True
         self.nodes = children_nodes
+        self.valid = True
 
 
 def get_time(time_str):
