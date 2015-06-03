@@ -32,7 +32,7 @@ def get_key_cache_path(username):
     return os.path.join(get_profile_dir(username), 'cached_key.json')
 
 
-def create_kuaipan_client(username, save_cache=True):
+def create_kuaipan_client(username=None, save_cache=True):
     profile_path = get_profile_path()
     if username is None:
         try:
@@ -47,12 +47,16 @@ def create_kuaipan_client(username, save_cache=True):
         cache_path = get_key_cache_path(username)
         if os.path.exists(cache_path):
             log.debug('Load cache key from %s', cache_path)
+            from oauthlib.oauth2 import TokenExpiredError
             try:
                 kp = kuaipan.load(cache_path)
                 kp.account_info()
-            except Exception, e:
-                log.warn(e.message)
+            except TokenExpiredError:
+                log.warn('Re-login as OAuth2 token is expired')
                 kp = None
+            except Exception, e:
+                log.warn('Invalid OAuth2 keys: %s', e.message)
+                raise
         else:
             log.warn('Can not find cache key file %s', cache_path)
 
