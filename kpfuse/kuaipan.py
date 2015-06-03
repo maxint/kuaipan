@@ -190,21 +190,21 @@ class KuaiPan(object):
             'height': height,
         })
 
-    def document_view(self, doctype, view, path, iszip=False):
+    def document_view(self, doc_type, view, path, is_zip=False):
         """
-        doctype = {
+        doc_type = {
             'pdf', 'doc', 'wps', 'csv', 'prn',
             'xls', 'et', 'ppt', 'dps', 'txt', 'rtf'
         }
         view = {'normal', 'android', 'iPad', 'iphone'}
-        zip = {0, 1}
+        is_zip = {0, 1}
         """
         return self.get('fileops/documentView', api='CONV', params={
             'root': self.root,
             'path': path,
-            'type': doctype,
+            'type': doc_type,
             'view': view,
-            'zip': 1 if iszip else 0,
+            'zip': 1 if is_zip else 0,
         })
 
 
