@@ -20,14 +20,20 @@ def make_dirs(path):
         os.makedirs(path)
 
 
-def launch(mount_point, username, foreground=False, verbose=False):
-    setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
-    if not verbose:
-        remove_log_handler('kpfuse', 'console')
+def get_profile_path():
+    return os.path.expanduser('~/.kpfuse/profile.json')
 
-    log.info('Mount point: %s', mount_point)
 
-    profile_path = os.path.expanduser('~/.kpfuse/profile.json')
+def get_profile_dir(username):
+    return os.path.expanduser('~/.kpfuse/' + username)
+
+
+def get_key_cache_path(username):
+    return os.path.join(get_profile_dir(username), 'cached_key.json')
+
+
+def create_kuaipan_client(username, save_cache=True):
+    profile_path = get_profile_path()
     if username is None:
         try:
             with open(profile_path, 'rt') as f:
@@ -38,10 +44,9 @@ def launch(mount_point, username, foreground=False, verbose=False):
 
     kp = None
     if username:
-        profile_dir = os.path.expanduser('~/.kpfuse/' + username)
-        cache_path = os.path.join(profile_dir, 'cached_key.json')
+        cache_path = get_key_cache_path(username)
         if os.path.exists(cache_path):
-            log.debug('Load cached key from %s', cache_path)
+            log.debug('Load cache key from %s', cache_path)
             try:
                 kp = kuaipan.load(cache_path)
                 kp.account_info()
@@ -49,27 +54,49 @@ def launch(mount_point, username, foreground=False, verbose=False):
                 log.warn(e.message)
                 kp = None
         else:
-            log.warn('Can not find user data directory: %s', profile_dir)
+            log.warn('Can not find cache key file %s', cache_path)
 
     if kp is None:
         kp = kuaipan.KuaiPan('xcNBQcp5oxmRanaC', 'ilhYuLMWpyVDaLm4')
         kp.authorise(oauth_callback.http_authorise)
         username = kp.account_info()['user_name']
-        log.debug('Create cached key')
-        cache_dir = os.path.expanduser('~/.kpfuse/' + username)
-        cache_path = os.path.join(cache_dir, 'cached_key.json')
-        log.debug('Save cached key to %s', cache_path)
-        make_dirs(cache_dir)
-        kp.save(cache_path)
+        if save_cache:
+            save_key_cache(kp, username)
 
     log.info('Login username: %s', username)
 
     # save last username
-    with open(profile_path, 'wt') as f:
-        json.dump(dict(last_username=username), f, indent=2)
+    if save_cache:
+        with open(profile_path, 'wt') as f:
+            json.dump(dict(last_username=username), f, indent=2)
+
+    return username, kp
+
+
+def save_key_cache(kp, username):
+    """
+    :type kp: kuaipan.KuaiPan
+    """
+    make_dirs(get_profile_dir(username))
+    cache_path = get_key_cache_path(username)
+    log.debug('Save cached key to %s', cache_path)
+    kp.save(cache_path)
+
+
+def launch(mount_point, username, foreground=False, verbose=False):
+    setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
+    if not verbose:
+        log.debug('Disable console output')
+        remove_log_handler('kpfuse', 'console')
+
+    log.info('Mount point: %s', mount_point)
+
+    log.debug('Creating Kuaipan client')
+    username, kp = create_kuaipan_client(username)
 
     log.debug('Create KuaipanFuse')
-    fuse_op = kpfuse.KuaipanFuse(kp, os.path.expanduser('~/.kpfuse/' + username))
+    fuse_op = kpfuse.KuaipanFuse(kp, get_profile_dir(username))
+
     log.info('Start FUSE file system')
     fuse.FUSE(fuse_op,
               mount_point,

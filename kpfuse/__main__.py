@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from .command import main
+from .launch import main
 
 if __name__ == '__main__':
     main()
