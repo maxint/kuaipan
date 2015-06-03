@@ -23,10 +23,10 @@ class LoggingMixIn:
 
     def __call__(self, op, path, *args):
         try:
-            log.debug(u'-> %s: %s (%s) [%s]', op, path,
+            log.debug(u"-> %s: %s (%s) [%s]", op, path,
                       ','.join(map(str, args)),
                       threading.current_thread().name)
-            ret = '[Unhandled Exception]'
+            ret = "[Unhandled Exception]"
             try:
                 ret = getattr(self, op)(path, *args)
                 return ret
@@ -35,14 +35,11 @@ class LoggingMixIn:
                 raise
                 # raise fuse.FuseOSError(errno.EFAULT)
             finally:
-                def cap_string(s, l):
-                    return s if len(s) < l else s[0:l - 3] + '... ({})'.format(len(s))
-
-                if (isinstance(ret, str) or isinstance(ret, unicode) or isinstance(ret, bytes)) and len(ret) > 128:
-                    msg = cap_string(repr(ret[:10]), 10)
+                if isinstance(ret, str) or isinstance(ret, bytes) or isinstance(ret, unicode):
+                    msg = "...({})".format(len(ret))
                 else:
                     msg = repr(ret)
-                log.debug('<- %s: %s %s', op, path, msg)
+                log.debug(u"<- %s: %s %s", op, path, msg)
         except fuse.FuseOSError, e:
             raise
         except:
