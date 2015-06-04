@@ -1,6 +1,6 @@
 # coding: utf-8
 
-__version__ = '0.4.1'
+__version__ = '0.5'
 
 __author__ = 'maxint'
 __email__ = 'lnychina@gmail.com'
@@ -11,8 +11,12 @@ __url__ = 'https://github.com/maxint/kuaipan'
 __status__ = '3 - Alpha'
 
 __changes__ = '''
-# Change Logsv
-0.4
+# Change Logs
+v0.5
+- Fix bug of cache file management.
+- Downloading and uploading in background thread for less operation block.
+
+v0.4
 - Use tree cache directory.
 - Fix bug of caching when renaming files or directories.
 
