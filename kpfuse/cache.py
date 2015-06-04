@@ -75,8 +75,9 @@ class FileCache(object):
                 self.raw = kp.download(self.node.path).raw
             else:
                 if cache_mtime > self.node.attribute.mtime:
+                    self.node.attribute.size = os.path.getsize(self.cache_path) # correct size
                     self.modified = NOT_UPLOADED  # previous not-uploaded _cache_dict
-                log.debug(u'open cache: %s', self.node.path)
+                log.debug(u'open cache: %s (modified=%d)', self.node.path, self.modified)
                 self._open_cache()
 
     def create(self):
@@ -143,6 +144,11 @@ class FileCache(object):
         name = os.path.basename(self.node.path)
         return name.startswith('.~') or name.startswith('~')
 
+    @property
+    def data_size(self):
+        with self._rwlock:
+            return len(self._data)
+
     def close(self):
         log.info(u'closing %s', self.node.path)
         with self._rwlock:
@@ -172,7 +178,7 @@ class FileCache(object):
                 return False
 
             assert len(self._data) == self.node.attribute.size
-            log.info(u'complete download: %s (%d)', self.node.path, len(self._data))
+            log.info(u'complete download (size=%d): %s', len(self._data), self.node.path)
             self.raw.close()
             self.raw = None
             self._write_cache()
@@ -280,21 +286,22 @@ class CachePool(object):
         """:type c: FileCache"""
         while True:
             if c.refcount > 0:
-                return
+                break
             if c.download(1024):
                 break
 
         self._remove_if_no_ref(c)
+        log.debug(u'download thread exited (size=%d): %s', c.data_size, c.node.path)
 
     def _upload_item(self, c):
         """:type c: FileCache"""
         time.sleep(0.5)
 
-        if c.refcount > 0:
-            return
-        c.upload(self.kp)
+        if c.refcount == 0:
+            c.upload(self.kp)
+            self._remove_if_no_ref(c)
 
-        self._remove_if_no_ref(c)
+        log.debug(u'upload thread exited: %s', c.node.path)
 
     def contains(self, path):
         return path in self._cache_dict
