@@ -22,7 +22,7 @@ setup(name='kpfuse',
       package_data={'kpfuse': ['*.json']},
       entry_points={
           'console_scripts': [
-              'kpfs=kpfuse.command:main',
+              'kpfs=kpfuse.launch:main',
           ]
       },
       install_requires=['requests', 'requests-oauthlib', 'fusepy'],
