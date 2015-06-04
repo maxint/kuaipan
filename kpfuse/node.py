@@ -131,12 +131,8 @@ class NodeTree:
         """
         :rtype: DirNode
         """
-        if path == '/':
-            return self.tree
-
-        names = [x for x in path.split('/') if x]
         node = self.tree
-        for name in names:
+        for name in filter(None, path.split('/')):
             if node is None or isinstance(node, FileNode):
                 return node
             """:type node: DirNode"""
