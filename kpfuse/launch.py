@@ -91,19 +91,21 @@ def save_key_cache(kp, username):
     """
     make_dirs(get_profile_dir(username))
     cache_path = get_key_cache_path(username)
-    log.debug('Save cached key to %s', cache_path)
+    log.info('Save cached key to %s', cache_path)
     kp.save(cache_path)
 
 
-def create_logger(verbose=False, **kwargs):
+def create_logger(foreground=False, verbose=False, **kwargs):
     setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'), **kwargs)
-    if not verbose:
+    if not foreground:
         remove_log_handler('kpfuse', 'console')
-        log.debug('Disable console output')
+        log.info('Disable console output')
+    if verbose:
+        logging.getLogger('kpfuse').setLevel(logging.DEBUG)
 
 
 def launch(mount_point, username, foreground=False, verbose=False):
-    create_logger(verbose)
+    create_logger(foreground, verbose)
 
     log.info('Mount point: %s', mount_point)
     fuse_op = create_kuaipan_fuse_operations(username)
@@ -132,7 +134,7 @@ def main():
     parser.add_argument('mount_point', type=readable_dir,
                         help='Mount point directory')
     parser.add_argument('-D', '--verbose', action='store_true',
-                        help='Enable logging')
+                        help='Enable debug logging')
     parser.add_argument('--foreground', '-f', action='store_true',
                         help='Run in foreground, for debug')
     parser.add_argument('-u', '--username', nargs='?',

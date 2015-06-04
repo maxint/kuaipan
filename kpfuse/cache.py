@@ -70,13 +70,13 @@ class FileCache(object):
             cache_mtime = os.path.getmtime(self.cache_path) if os.path.exists(self.cache_path) else 0
             log.debug(u'modified time (%s -> %s): %s', cache_mtime, self.node.attribute.mtime, self.node.path)
             if cache_mtime < self.node.attribute.mtime and len(self._data) != self.node.attribute.size:
-                log.info(u'from net (size=%d -> %d): %s', len(self._data), self.node.attribute.size, self.node.path)
+                log.debug(u'from net (size=%d -> %d): %s', len(self._data), self.node.attribute.size, self.node.path)
                 self._data = ''
                 self.raw = kp.download(self.node.path).raw
             else:
                 if cache_mtime > self.node.attribute.mtime:
                     self.modified = NOT_UPLOADED  # previous not-uploaded _cache_dict
-                log.info(u'open cache: %s', self.node.path)
+                log.debug(u'open cache: %s', self.node.path)
                 self._open_cache()
 
     def create(self):
@@ -172,7 +172,7 @@ class FileCache(object):
                 return False
 
             assert len(self._data) == self.node.attribute.size
-            log.debug(u'complete download: %s (%d)', self.node.path, len(self._data))
+            log.info(u'complete download: %s (%d)', self.node.path, len(self._data))
             self.raw.close()
             self.raw = None
             self._write_cache()
@@ -198,7 +198,7 @@ class FileCache(object):
             self.modified = NOT_MODIFIED
 
     def _write_cache(self):
-        log.info(u'writing to cache: %s', self.node.path)
+        log.debug(u'writing to cache: %s', self.node.path)
         cache_dir = os.path.dirname(self.cache_path)
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
