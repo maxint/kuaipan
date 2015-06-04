@@ -34,7 +34,7 @@ class LoggingMixIn(object):
                 # raise fuse.FuseOSError(errno.EFAULT)
             finally:
                 if isinstance(ret, str) or isinstance(ret, bytes) or isinstance(ret, unicode):
-                    msg = "{}...({})".format(ret[:10].encode('utf-8'), len(ret))
+                    msg = u"{}...({})".format(repr(ret[:10]), len(ret))
                 else:
                     msg = repr(ret)
                 self.log.debug(u"<- %s: %s %s", op, path, msg)
