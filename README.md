@@ -43,10 +43,11 @@ kpfs -h
 ```
 
 
-# Debug
+# Debug & Bug Report
 
-Logging is enabled by default. The log file locates at `/tmp/kpfuse.log`.
-If you has any issue, please upload the log file as attachment.
+This fuse file system is far from perfect and may suck sometimes. Bug reports and any other contributions are welcomed. 
+Logging is enabled by default. Additionally, run `kpfs` command with `-D` to enable debug logging for more internal information.
+The log file locates at `/tmp/kpfuse.log`. If you has any issue, please paste the log as well.
 
 
 # Local Cache
