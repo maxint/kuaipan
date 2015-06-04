@@ -116,6 +116,7 @@ class KuaipanFuseOperations(LoggingMixIn, fuse.Operations):
     def create(self, path, mode=0644, fi=None):
         # create file
         with self.rwlock:
+            self.tree.create(path, False)
             c = self.caches.create(path)
             return self._get_fd(c)
 

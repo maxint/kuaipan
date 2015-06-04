@@ -16,6 +16,10 @@ from .kuaipan import KuaiPan
 
 log = logging.getLogger(__name__)
 
+NOT_MODIFIED = 0
+MODIFIED = 1
+NOT_UPLOADED = 2
+
 
 class FileCache(object):
     """
@@ -28,8 +32,8 @@ class FileCache(object):
         self.raw = None
         self.fh = None
         self.flags = None
-        self.modified = 0
-        self.rwlock = threading.Lock()
+        self.modified = NOT_MODIFIED
+        self.rwlock = threading.RLock()
         self.ref_lock = threading.Lock()
         self.data = ''
         # reference count is needed, as file may be opened more than once.
@@ -48,36 +52,38 @@ class FileCache(object):
         with self.ref_lock:
             return self.ref_count
 
+    @property
+    def is_opened(self):
+        with self.rwlock:
+            return self.raw is not None or self.fh is not None
+
     def open(self, kp, flags):
         """
         :type kp: KuaiPan
         """
         with self.rwlock:
-            assert self.raw is None
-            log.info(u'opening %s (refcount=%d)', self.node.path, self.ref_count)
+            log.info(u'opening %s (refcount=%d)', self.node.path, self.refcount)
             self.flags = flags
+            if self.is_opened:
+                return
+
             cache_mtime = os.path.getmtime(self.cache_path) if os.path.exists(self.cache_path) else 0
+            log.debug(u'modified time (%s -> %s): %s', cache_mtime, self.node.attribute.mtime, self.node.path)
             if cache_mtime < self.node.attribute.mtime and len(self.data) != self.node.attribute.size:
-                log.info(u'from net %s (size=%d -> %d)', self.node.path,
-                         len(self.data), self.node.attribute.size)
+                log.info(u'from net (size=%d -> %d): %s', len(self.data), self.node.attribute.size, self.node.path)
                 self.data = ''
                 self.raw = kp.download(self.node.path).raw
             else:
                 if cache_mtime > self.node.attribute.mtime:
-                    self.modified = 2  # previous not-uploaded data
-                log.info(u'open cache %s, mtime(%s -> %s)', self.node.path,
-                         os.path.getmtime(self.cache_path), self.node.attribute.mtime)
+                    self.modified = NOT_UPLOADED  # previous not-uploaded _cache_dict
+                log.info(u'open cache: %s', self.node.path)
                 self._open_cache()
-
-    def reopen(self, flags):
-        with self.rwlock:
-            self.flags = flags
 
     def create(self):
         with self.rwlock:
             assert self.raw is None
-            log.info(u'creating %s (refcount=%d)', self.node.path, self.ref_count)
-            self.modified = 1
+            log.info(u'creating %s (refcount=%d)', self.node.path, self.refcount)
+            self.modified = MODIFIED
             self.fh = os.open(self.cache_path, os.O_CREAT | os.O_RDWR)
 
     def read(self, size, offset):
@@ -85,7 +91,7 @@ class FileCache(object):
             if self.fh is None:
                 total = size + offset
                 if len(self.data) < total:
-                    if self._download(total - len(self.data)):
+                    if self.download(total - len(self.data)):
                         self._open_cache()
             if self.fh is not None:
                 os.lseek(self.fh, offset, 0)
@@ -97,14 +103,14 @@ class FileCache(object):
         with self.rwlock:
             if self.fh is not None:
                 os.ftruncate(self.fh, length)
-                self.modified = 1
+                self.modified = MODIFIED
             elif len(self.data) != length:
                 self.data = self.data[:length]
-                self.modified = 1
+                self.modified = MODIFIED
 
     def write(self, data, offset):
         with self.rwlock:
-            self.modified = 1
+            self.modified = MODIFIED
             if self.fh is not None:
                 os.lseek(self.fh, offset, 0)
                 return os.write(self.fh, data)
@@ -116,7 +122,7 @@ class FileCache(object):
                 return len(data)
 
     def flush(self):
-        if self.fh is not None and self.modified:
+        if self.fh is not None and self.modified != NOT_MODIFIED:
             os.fsync(self.fh)
 
     @property
@@ -124,7 +130,7 @@ class FileCache(object):
         with self.rwlock:
             if self.fh is not None:
                 return True
-            elif self.modified:
+            elif self.modified != NOT_MODIFIED:
                 return True
             elif self.node.attribute.size == len(self.data):
                 return True
@@ -147,7 +153,7 @@ class FileCache(object):
             if self.fh:
                 os.close(self.fh)
 
-            if self.modified == 1 and self.fh is None:
+            if self.modified == MODIFIED and self.fh is None:
                 self._write_cache()
 
             self.fh = None
@@ -156,48 +162,43 @@ class FileCache(object):
         self.fh = os.open(self.cache_path, self.flags)
         self.data = ''
 
-    def _download(self, size):
-        """Return True if completed"""
-        assert self.raw is not None
-        self.data += self.raw.read(size)
-        if self.raw.readable() and len(self.data) < self.node.attribute.size:
-            return False
-
-        assert len(self.data) == self.node.attribute.size
-        log.debug(u'complete download: %s (%d)', self.node.path, len(self.data))
-        self.raw.close()
-        self.raw = None
-        self._write_cache()
-        self._update_cache_utime()
-
-        return True
-
     def download(self, size):
         with self.rwlock:
-            assert self.modified == 0
-            return self.raw is None or self._download(size)
+            assert self.modified == NOT_MODIFIED
+            """Return True if completed"""
+            assert self.raw is not None
+            self.data += self.raw.read(size)
+            if self.raw.readable() and len(self.data) < self.node.attribute.size:
+                return False
 
-    def _upload(self, kp):
-        """:type kp: KuaiPan"""
-        log.info(u"upload: %s", self.node.path)
-        if self.fh is not None:
-            os.close(self.fh)
-            kp.upload(self.node.path, open(self.cache_path, 'rb'), True)
-        else:
-            kp.upload(self.node.path, self.data, True)
-
-        self.node.update_meta(kp)
-        self._update_cache_utime()
+            assert len(self.data) == self.node.attribute.size
+            log.debug(u'complete download: %s (%d)', self.node.path, len(self.data))
+            self.raw.close()
+            self.raw = None
+            self._write_cache()
+            self._update_cache_utime()
+            return True
 
     def upload(self, kp):
         """:type kp: KuaiPan"""
         with self.rwlock:
-            if self.modified:
-                self._upload(kp)
-                self.modified = 0
+            if self.modified == NOT_MODIFIED:
+                return
+
+            """:type kp: KuaiPan"""
+            log.info(u"upload: %s", self.node.path)
+            if self.fh is not None:
+                os.close(self.fh)
+                kp.upload(self.node.path, open(self.cache_path, 'rb'), True)
+            else:
+                kp.upload(self.node.path, self.data, True)
+
+            self.node.update_meta(kp)
+            self._update_cache_utime()
+            self.modified = NOT_MODIFIED
 
     def _write_cache(self):
-        log.info(u'writing %s to cache', self.node.path)
+        log.info(u'writing to cache: %s', self.node.path)
         cache_dir = os.path.dirname(self.cache_path)
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
@@ -218,39 +219,13 @@ class CachePool(object):
         :return:
         """
         assert os.path.isdir(pool_dir)
-        self.data = dict()
+        self._cache_dict = dict()
         self.tree = tree
         self.kp = tree.kp
         self.pool_dir = pool_dir
-        self.clear_old_files()
+        self._clear_old_files()
 
-    def _download_item(self, c):
-        """:type c: FileCache"""
-        if c.refcount != 0:
-            return False
-
-        if not c.download(1024):
-            return True
-
-        if c.refcount == 0:
-            self.data.pop(c.node.path)
-
-        return False
-
-    def _upload_item(self, c):
-        """:type c: FileCache"""
-        time.sleep(1)
-        if c.refcount != 0:
-            return False
-
-        c.upload(self.kp)
-
-        if c.refcount == 0:
-            self.data.pop(c.node.path)
-
-        return True
-
-    def clear_old_files(self, passed_day=30):
+    def _clear_old_files(self, passed_day=30):
         """
         Clean cache files who's access time is before given days ago.
         """
@@ -276,53 +251,92 @@ class CachePool(object):
     def _get_cache_path(self, path):
         return self.pool_dir + path
 
-    def get(self, path):
-        """
-        :rtype: FileCache
-        """
-        assert path in self.data
-        return self.data[path]
-
-    def open(self, path, flags):
-        if path in self.data:
+    def _add(self, path):
+        log.debug(u'add cache path: %s', path)
+        if path in self._cache_dict:
             c = self.get(path)
-            c.reopen(flags)
         else:
             node = self.tree.get(path)
             c = FileCache(node, self._get_cache_path(path))
-            c.open(self.kp, flags)
-            self.data[path] = c
-
+            self._cache_dict[path] = c
         c.add_ref()
+        return  c
+
+    def _remove(self, c, delete=True):
+        """:type c: FileCache"""
+        c.delete_ref()
+        if delete:
+            c = self._remove_if_no_ref(c)
+        return c
+
+    def _remove_if_no_ref(self, c):
+        """:type c: FileCache"""
+        log.debug(u'remove cache path: %s (refcount=%d)', c.node.path, c.refcount)
+        if c.refcount == 0:
+            c = self._cache_dict.pop(c.node.path)
+        return c
+
+    def _download_item(self, c):
+        """:type c: FileCache"""
+        while True:
+            if c.refcount > 0:
+                return
+            if c.download(1024):
+                break
+
+        self._remove_if_no_ref(c)
+
+    def _upload_item(self, c):
+        """:type c: FileCache"""
+        time.sleep(0.5)
+
+        if c.refcount > 0:
+            return
+        c.upload(self.kp)
+
+        self._remove_if_no_ref(c)
+
+    def contains(self, path):
+        return path in self._cache_dict
+
+    def get(self, path):
+        """:rtype: FileCache"""
+        return self._cache_dict[path]
+
+    def open(self, path, flags):
+        c = self._add(path)
+        try:
+            c.open(self.kp, flags)
+        except:
+            log.warn(u'open failed: %s (refcount=%d)', path, c.refcount)
+            self._remove(c)
+            raise
         return c
 
     def create(self, path):
-        if path in self.data:
-            c = self.get(path)
-        else:
-            node = self.tree.create(path, False)
-            c = FileCache(node, self._get_cache_path(path))
-            self.data[path] = c
-
-        c.add_ref()
-        c.create()
+        c = self._add(path)
+        try:
+            c.create()
+        except:
+            log.warn(u'create failed: %s (refcount=%d)', path, c.refcount)
+            self._remove(c)
+            raise
         return c
 
     def close(self, path):
-        c = self.get(path)
-        c.delete_ref()
+        c = self._remove(self.get(path), delete=False)
         if c.refcount == 0:
             if c.close():
-                self.data.pop(path)
+                self._cache_dict.pop(path)
             elif c.modified:
                 log.debug(u'running upload thread: %s', path)
-                QueueThread(self._upload_item, c)
+                HelperThread(self._upload_item, c).start()
             elif not c.completed:
                 log.debug(u'running download thread: %s', path)
-                QueueThread(self._download_item, c)
+                HelperThread(self._download_item, c).start()
             else:
                 log.debug(u'pop file cache: %s', path)
-                self.data.pop(path)
+                self._cache_dict.pop(path)
 
     def move(self, old, new):
         old_cache_path = self._get_cache_path(old)
@@ -331,13 +345,15 @@ class CachePool(object):
             os.rename(old_cache_path, new_cache_path)
 
 
-class QueueThread(threading.Thread):
-    def __init__(self, run_func, item):
-        super(QueueThread, self).__init__()
+class HelperThread(threading.Thread):
+    def __init__(self, run_func, *args):
+        super(HelperThread, self).__init__()
         self.run_func = run_func
-        self.item = item
+        self.args = args
 
     def run(self):
-        while True:
-            if not self.run_func(self.item):
-                break
+        try:
+            self.run_func(*self.args)
+        except:
+            log.exception('Exception raised in HelperThread')
+            raise
