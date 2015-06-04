@@ -15,17 +15,15 @@ import threading
 import cache
 from .node import NodeTree
 
-log = logging.getLogger(__name__)
 
-
-class LoggingMixIn:
+class LoggingMixIn(object):
     log = logging.getLogger('kpfuse.log-mixin')
 
     def __call__(self, op, path, *args):
         try:
-            log.debug(u"-> %s: %s (%s) [%s]", op, path,
-                      ','.join(map(str, args)),
-                      threading.current_thread().name)
+            self.log.debug(u"-> %s: %s (%s) [%s]", op, path,
+                           ','.join(map(str, args)),
+                           threading.current_thread().name)
             ret = "[Unhandled Exception]"
             try:
                 ret = getattr(self, op)(path, *args)
@@ -36,28 +34,32 @@ class LoggingMixIn:
                 # raise fuse.FuseOSError(errno.EFAULT)
             finally:
                 if isinstance(ret, str) or isinstance(ret, bytes) or isinstance(ret, unicode):
-                    msg = "...({})".format(len(ret))
+                    msg = "{}...({})".format(ret[:10].encode('utf-8'), len(ret))
                 else:
                     msg = repr(ret)
-                log.debug(u"<- %s: %s %s", op, path, msg)
-        except fuse.FuseOSError, e:
+                self.log.debug(u"<- %s: %s %s", op, path, msg)
+        except fuse.FuseOSError:
             raise
         except:
-            log.exception('__call__ exception')
+            self.log.exception('__call__ exception')
             raise
 
 
-class KuaipanFuse(LoggingMixIn, fuse.Operations):
-    def __init__(self, kp, pool_dir):
+class KuaipanFuseOperations(LoggingMixIn, fuse.Operations):
+    """
+    :type kp: kuaipan.KuaiPan
+    """
+    def __init__(self, kp, profile_dir):
         self.kp = kp
         self.tree = NodeTree(kp)
-        cache_dir = os.path.join(pool_dir, 'object')
+        self.profile_dir = profile_dir
+        self.cache_dir = os.path.join(profile_dir, 'object')
         self.fd = 0
         self.fd_map = dict()
         self.rwlock = threading.Lock()
-        if not os.path.exists(cache_dir):
-            os.makedirs(cache_dir)
-        self.caches = cache.CachePool(self.tree, cache_dir)
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        self.caches = cache.CachePool(self.tree, self.cache_dir)
 
     def _get_fd(self, c):
         if len(self.fd_map) != 0:

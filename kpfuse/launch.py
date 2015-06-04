@@ -77,6 +77,14 @@ def create_kuaipan_client(username=None, save_cache=True):
     return username, kp
 
 
+def create_kuaipan_fuse_operations(username=None, save_cache=True):
+    log.debug('Creating Kuaipan client')
+    username, kp = create_kuaipan_client(username, save_cache)
+
+    log.debug('Create KuaipanFuse')
+    return kpfuse.KuaipanFuseOperations(kp, get_profile_dir(username))
+
+
 def save_key_cache(kp, username):
     """
     :type kp: kuaipan.KuaiPan
@@ -87,19 +95,18 @@ def save_key_cache(kp, username):
     kp.save(cache_path)
 
 
-def launch(mount_point, username, foreground=False, verbose=False):
-    setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'))
+def create_logger(verbose=False, **kwargs):
+    setup_logging(os.path.join(os.path.dirname(__file__), 'logging.json'), **kwargs)
     if not verbose:
         remove_log_handler('kpfuse', 'console')
         log.debug('Disable console output')
 
+
+def launch(mount_point, username, foreground=False, verbose=False):
+    create_logger(verbose)
+
     log.info('Mount point: %s', mount_point)
-
-    log.debug('Creating Kuaipan client')
-    username, kp = create_kuaipan_client(username)
-
-    log.debug('Create KuaipanFuse')
-    fuse_op = kpfuse.KuaipanFuse(kp, get_profile_dir(username))
+    fuse_op = create_kuaipan_fuse_operations(username)
 
     log.info('Start FUSE file system')
     fuse.FUSE(fuse_op,

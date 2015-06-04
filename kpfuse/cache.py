@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 class FileCache(object):
     """
-    :type raw: file
+    :type raw: io.RawIOBase
     :type node: AbstractNode
     """
     def __init__(self, node, cache_path):
@@ -138,7 +138,6 @@ class FileCache(object):
         return name.startswith('.~') or name.startswith('~')
 
     def close(self):
-        """:type kp: KuaiPan"""
         log.info(u'closing %s', self.node.path)
         with self.rwlock:
             if self.ignored:

@@ -76,7 +76,8 @@ class KuaiPan(object):
 
     def get(self, url, api='API', path=None, **kwargs):
         url = self.build_url(url, api, path)
-        r = self.oauth.get(url, **kwargs)
+        timeout = kwargs.pop('timeout', 1)
+        r = self.oauth.get(url, timeout=timeout, **kwargs)
         """:type: Response"""
         if r.status_code == 200:
             return r
@@ -87,12 +88,12 @@ class KuaiPan(object):
         else:
             raise errors.OAuthResponseError(r)
 
-    def account_info(self):
-        return self.get('account_info').json()
+    def account_info(self, **kwargs):
+        return self.get('account_info', **kwargs).json()
 
     def metadata(self, path, recurse=None, file_limit=None,
                  page=None, page_size=None,
-                 filter_ext=None, sort_by=None):
+                 filter_ext=None, sort_by=None, **kwargs):
         return self.get('metadata', path=path, params={
             'list': recurse,
             'file_limit': file_limit,
@@ -100,57 +101,57 @@ class KuaiPan(object):
             'page_size': page_size,
             'filter_ext': filter_ext,
             'sort_by': sort_by,
-        }).json()
+        }, **kwargs).json()
 
-    def shares(self, path, name=None, access_code=None):
+    def shares(self, path, name=None, access_code=None, **kwargs):
         return self.get('shares', path=path, params={
             'name': name,
             'access_code': access_code,
-        }).json()
+        }, **kwargs).json()
 
-    def history(self, path):
-        return self.get('history', path=path).json()
+    def history(self, path, **kwargs):
+        return self.get('history', path=path, **kwargs).json()
 
-    def mkdir(self, path, force=False):
+    def mkdir(self, path, force=False, **kwargs):
         try:
             return self.get('fileops/create_folder', params={
                 'root': self.root,
                 'path': path,
-            }).json()
+            }, **kwargs).json()
         except errors.FileExistedError:
             if not force:
                 raise
 
-    def delete(self, path, to_recycle=None, force=False):
+    def delete(self, path, to_recycle=None, force=False, **kwargs):
         try:
             return self.get('fileops/delete', params={
                 'root': self.root,
                 'path': path,
                 'to_recycle': to_recycle,
-            })
+            }, **kwargs)
         except errors.FileNotExistedError:
             if not force:
                 raise
 
-    def move(self, from_path, to_path):
+    def move(self, from_path, to_path, **kwargs):
         return self.get('fileops/move', params={
             'root': self.root,
             'from_path': from_path,
             'to_path': to_path,
-        })
+        }, **kwargs)
 
-    def copy(self, from_path, to_path, from_copy_ref=None):
+    def copy(self, from_path, to_path, from_copy_ref=None, **kwargs):
         return self.get('fileops/copy', params={
             'root': self.root,
             'from_path': from_path,
             'to_path': to_path,
             'from_copy_ref': from_copy_ref,
-        })
+        }, **kwargs)
 
-    def copy_ref(self, path):
-        return self.get('copy_ref', path=path).json()
+    def copy_ref(self, path, **kwargs):
+        return self.get('copy_ref', path=path, **kwargs).json()
 
-    def upload(self, path, data, overwrite=True, source_ip=None):
+    def upload(self, path, data, overwrite=True, source_ip=None, **kwargs):
         """
         :param data: file object or str data.
         """
@@ -162,9 +163,9 @@ class KuaiPan(object):
             'root': self.root,
             'path': path,
             'overwrite': overwrite,
-        }, files=dict(file=data)).json()
+        }, files=dict(file=data), **kwargs).json()
 
-    def download(self, path, rev=None):
+    def download(self, path, rev=None, **kwargs):
         """
         Download file and return requests.Response
 
@@ -177,9 +178,9 @@ class KuaiPan(object):
             'root': self.root,
             'path': path,
             'rev': rev,
-        }, stream=True)
+        }, stream=True, timeout=kwargs.get('timeout', 1.5), **kwargs)
 
-    def thumbnail(self, width, height, path):
+    def thumbnail(self, width, height, path, **kwargs):
         """
         TYPE_IMG = ('gif', 'png', 'jpg', 'bmp', 'jpeg', 'jpe')
         """
@@ -188,9 +189,9 @@ class KuaiPan(object):
             'path': path,
             'width': width,
             'height': height,
-        })
+        }, **kwargs)
 
-    def document_view(self, doc_type, view, path, is_zip=False):
+    def document_view(self, doc_type, view, path, is_zip=False, **kwargs):
         """
         doc_type = {
             'pdf', 'doc', 'wps', 'csv', 'prn',
@@ -205,7 +206,7 @@ class KuaiPan(object):
             'type': doc_type,
             'view': view,
             'zip': 1 if is_zip else 0,
-        })
+        }, **kwargs)
 
 
 def load(filename):
