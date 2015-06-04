@@ -96,7 +96,7 @@ class DirNode(AbstractNode):
         children_nodes = dict()
         for x in meta.get('files', []):
             child_name = x['name']
-            child_path = self.path + '/' + child_name
+            child_path = os.path.join(self.path, child_name)
             child_node = FileNode(child_path) if x['type'] == 'file' else DirNode(child_path)
             child_node.attribute = create_stat(x)
             children_nodes[child_name] = child_node
@@ -139,7 +139,7 @@ class NodeTree:
         for name in names:
             if node is None or isinstance(node, FileNode):
                 return node
-            """:type: DirNode"""
+            """:type node: DirNode"""
             node.build(self.kp)
             node = node.get(name)
 
