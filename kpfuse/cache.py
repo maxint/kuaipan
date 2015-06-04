@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 import shutil
+import Queue
 
 from .node import AbstractNode
 from .node import NodeTree
@@ -230,6 +231,30 @@ class CachePool(object):
         self.kp = tree.kp
         self.pool_dir = pool_dir
         self._clear_old_files()
+        self.thread_queue = Queue.Queue(1000)
+
+    def __del__(self):
+        while True:
+            a_thread = self.thread_queue.get()
+            if a_thread is None:
+                break
+            """:type a_thread: HelperThread"""
+            assert isinstance(a_thread, HelperThread)
+            a_thread.join()
+            self.thread_queue.task_done()
+
+    def _start_thread(self, t):
+        for i in xrange(self.thread_queue.qsize()):
+            a_thread = self.thread_queue.get()
+            if a_thread is None:
+                break
+            assert isinstance(a_thread, HelperThread)
+            if a_thread.is_alive:
+                self.thread_queue.put(a_thread)
+            self.thread_queue.task_done()
+
+        self.thread_queue.put(t)
+        t.start()
 
     def _clear_old_files(self, passed_day=30):
         """
@@ -279,7 +304,7 @@ class CachePool(object):
         """:type c: FileCache"""
         log.debug(u'remove cache path: %s (refcount=%d)', c.node.path, c.refcount)
         if c.refcount == 0:
-            c = self._cache_dict.pop(c.node.path)
+            c = self._cache_dict.pop(c.node.path, None)
         return c
 
     def _download_item(self, c):
@@ -337,10 +362,10 @@ class CachePool(object):
                 self._cache_dict.pop(path)
             elif c.modified:
                 log.debug(u'running upload thread: %s', path)
-                HelperThread(self._upload_item, c).start()
+                self._start_thread(HelperThread(self._upload_item, c))
             elif not c.completed:
                 log.debug(u'running download thread: %s', path)
-                HelperThread(self._download_item, c).start()
+                self._start_thread(HelperThread(self._download_item, c))
             else:
                 log.debug(u'pop file cache: %s', path)
                 self._cache_dict.pop(path)

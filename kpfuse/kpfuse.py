@@ -61,6 +61,10 @@ class KuaipanFuseOperations(LoggingMixIn, fuse.Operations):
             os.makedirs(self.cache_dir)
         self.caches = cache.CachePool(self.tree, self.cache_dir)
 
+    def __del__(self):
+        with self.rwlock:
+            del self.caches     # Invoke the destructor
+
     def _get_fd(self, c):
         if len(self.fd_map) != 0:
             self.fd += 1
@@ -106,7 +110,8 @@ class KuaipanFuseOperations(LoggingMixIn, fuse.Operations):
     def rmdir(self, path):
         # remove directory
         with self.rwlock:
-            self.kp.delete(path)
+            # TODO: force delete not-uploaded new file
+            self.kp.delete(path, force=True)
             self.tree.remove(path)
 
     def unlink(self, path):

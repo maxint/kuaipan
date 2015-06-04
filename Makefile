@@ -20,5 +20,6 @@ test:
 	ls /tmp/kpfuse_mnt
 	echo 'hi' > /tmp/kpfuse_mnt/__test__.txt
 	cat /tmp/kpfuse_mnt/__test__.txt
+	rm /tmp/kpfuse_mnt/__test__.txt
 	sudo umount /tmp/kpfuse_mnt
 	rmdir /tmp/kpfuse_mnt
