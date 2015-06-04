@@ -33,35 +33,35 @@ class FileCache(object):
         self.fh = None
         self.flags = None
         self.modified = NOT_MODIFIED
-        self.rwlock = threading.RLock()
-        self.ref_lock = threading.Lock()
-        self.data = ''
+        self._rwlock = threading.RLock()
+        self._data = ''
         # reference count is needed, as file may be opened more than once.
-        self.ref_count = 0
+        self._ref_lock = threading.Lock()
+        self._refcount = 0
 
     def add_ref(self):
-        with self.ref_lock:
-            self.ref_count += 1
+        with self._ref_lock:
+            self._refcount += 1
 
     def delete_ref(self):
-        with self.ref_lock:
-            self.ref_count -= 1
+        with self._ref_lock:
+            self._refcount -= 1
 
     @property
     def refcount(self):
-        with self.ref_lock:
-            return self.ref_count
+        with self._ref_lock:
+            return self._refcount
 
     @property
     def is_opened(self):
-        with self.rwlock:
+        with self._rwlock:
             return self.raw is not None or self.fh is not None
 
     def open(self, kp, flags):
         """
         :type kp: KuaiPan
         """
-        with self.rwlock:
+        with self._rwlock:
             log.info(u'opening %s (refcount=%d)', self.node.path, self.refcount)
             self.flags = flags
             if self.is_opened:
@@ -69,9 +69,9 @@ class FileCache(object):
 
             cache_mtime = os.path.getmtime(self.cache_path) if os.path.exists(self.cache_path) else 0
             log.debug(u'modified time (%s -> %s): %s', cache_mtime, self.node.attribute.mtime, self.node.path)
-            if cache_mtime < self.node.attribute.mtime and len(self.data) != self.node.attribute.size:
-                log.info(u'from net (size=%d -> %d): %s', len(self.data), self.node.attribute.size, self.node.path)
-                self.data = ''
+            if cache_mtime < self.node.attribute.mtime and len(self._data) != self.node.attribute.size:
+                log.info(u'from net (size=%d -> %d): %s', len(self._data), self.node.attribute.size, self.node.path)
+                self._data = ''
                 self.raw = kp.download(self.node.path).raw
             else:
                 if cache_mtime > self.node.attribute.mtime:
@@ -80,36 +80,36 @@ class FileCache(object):
                 self._open_cache()
 
     def create(self):
-        with self.rwlock:
+        with self._rwlock:
             assert self.raw is None
             log.info(u'creating %s (refcount=%d)', self.node.path, self.refcount)
             self.modified = MODIFIED
             self.fh = os.open(self.cache_path, os.O_CREAT | os.O_RDWR)
 
     def read(self, size, offset):
-        with self.rwlock:
+        with self._rwlock:
             if self.fh is None:
                 total = size + offset
-                if len(self.data) < total:
-                    if self.download(total - len(self.data)):
+                if len(self._data) < total:
+                    if self.download(total - len(self._data)):
                         self._open_cache()
             if self.fh is not None:
                 os.lseek(self.fh, offset, 0)
                 return os.read(self.fh, size)
             else:
-                return self.data[offset:(size + offset)]
+                return self._data[offset:(size + offset)]
 
     def truncate(self, length):
-        with self.rwlock:
+        with self._rwlock:
             if self.fh is not None:
                 os.ftruncate(self.fh, length)
                 self.modified = MODIFIED
-            elif len(self.data) != length:
-                self.data = self.data[:length]
+            elif len(self._data) != length:
+                self._data = self._data[:length]
                 self.modified = MODIFIED
 
     def write(self, data, offset):
-        with self.rwlock:
+        with self._rwlock:
             self.modified = MODIFIED
             if self.fh is not None:
                 os.lseek(self.fh, offset, 0)
@@ -118,7 +118,7 @@ class FileCache(object):
                 if self.raw:
                     self.raw.close()
                     self.raw = None
-                self.data = self.data[:offset] + data
+                self._data = self._data[:offset] + data
                 return len(data)
 
     def flush(self):
@@ -127,12 +127,12 @@ class FileCache(object):
 
     @property
     def completed(self):
-        with self.rwlock:
+        with self._rwlock:
             if self.fh is not None:
                 return True
             elif self.modified != NOT_MODIFIED:
                 return True
-            elif self.node.attribute.size == len(self.data):
+            elif self.node.attribute.size == len(self._data):
                 return True
             elif self.raw is None:
                 return True
@@ -145,7 +145,7 @@ class FileCache(object):
 
     def close(self):
         log.info(u'closing %s', self.node.path)
-        with self.rwlock:
+        with self._rwlock:
             if self.ignored:
                 log.warn(u'ignore %s', self.node.path)
                 return True
@@ -160,19 +160,19 @@ class FileCache(object):
 
     def _open_cache(self):
         self.fh = os.open(self.cache_path, self.flags)
-        self.data = ''
+        self._data = ''
 
     def download(self, size):
-        with self.rwlock:
+        with self._rwlock:
             assert self.modified == NOT_MODIFIED
             """Return True if completed"""
             assert self.raw is not None
-            self.data += self.raw.read(size)
-            if self.raw.readable() and len(self.data) < self.node.attribute.size:
+            self._data += self.raw.read(size)
+            if self.raw.readable() and len(self._data) < self.node.attribute.size:
                 return False
 
-            assert len(self.data) == self.node.attribute.size
-            log.debug(u'complete download: %s (%d)', self.node.path, len(self.data))
+            assert len(self._data) == self.node.attribute.size
+            log.debug(u'complete download: %s (%d)', self.node.path, len(self._data))
             self.raw.close()
             self.raw = None
             self._write_cache()
@@ -181,7 +181,7 @@ class FileCache(object):
 
     def upload(self, kp):
         """:type kp: KuaiPan"""
-        with self.rwlock:
+        with self._rwlock:
             if self.modified == NOT_MODIFIED:
                 return
 
@@ -191,7 +191,7 @@ class FileCache(object):
                 os.close(self.fh)
                 kp.upload(self.node.path, open(self.cache_path, 'rb'), True)
             else:
-                kp.upload(self.node.path, self.data, True)
+                kp.upload(self.node.path, self._data, True)
 
             self.node.update_meta(kp)
             self._update_cache_utime()
@@ -203,11 +203,11 @@ class FileCache(object):
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         with open(self.cache_path, 'wb') as f:
-            f.write(self.data)
+            f.write(self._data)
 
     def _update_cache_utime(self):
         if os.path.exists(self.cache_path):
-            log.debug(u'update cach utime: %s', self.cache_path)
+            log.debug(u'update cache utime: %s', self.cache_path)
             attribute = self.node.attribute
             os.utime(self.cache_path, (time.time(), attribute.mtime))
 
@@ -260,7 +260,7 @@ class CachePool(object):
             c = FileCache(node, self._get_cache_path(path))
             self._cache_dict[path] = c
         c.add_ref()
-        return  c
+        return c
 
     def _remove(self, c, delete=True):
         """:type c: FileCache"""
