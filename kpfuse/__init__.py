@@ -4,4 +4,4 @@ from .version import __version__
 
 from .errors import setup_logging
 from .kpfuse import KuaipanFuseOperations
-from .launch import main
+from .launch import safe_launch

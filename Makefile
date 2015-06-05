@@ -6,6 +6,8 @@ clean:
 	@rm -rf build
 	@rm -rf dist
 	@rm -rf kpfuse.egg-info
+	@rm -rf tests/*.pyc
+	@rm -rf kpfuse/*.pyc
 
 build:
 	python2 setup.py bdist

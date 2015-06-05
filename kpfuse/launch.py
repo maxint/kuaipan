@@ -104,7 +104,7 @@ def create_logger(foreground=False, verbose=False, **kwargs):
         logging.getLogger('kpfuse').setLevel(logging.DEBUG)
 
 
-def launch(mount_point, username, foreground=False, verbose=False):
+def launch(mount_point, username=None, foreground=False, verbose=False):
     create_logger(foreground, verbose)
 
     log.info('Mount point: %s', mount_point)
@@ -119,6 +119,14 @@ def launch(mount_point, username, foreground=False, verbose=False):
               # nonempty=True, # fuse: unknown option `nonempty' on OS X
               nothreads=False,  # on multiple thread
               ro=False)  # readonly
+
+
+def safe_launch(**kwargs):
+    try:
+        launch(**kwargs)
+    except:
+        log.exception('kpfuse failed')
+        raise
 
 
 def main():
@@ -145,12 +153,7 @@ def main():
                                                                                    email=version.__email__))
 
     args = parser.parse_args()
-
-    try:
-        launch(**vars(args))
-    except:
-        log.exception('kpfuse command failed')
-        raise
+    safe_launch(**vars(args))
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ Note: use "--user" to install into user directory.
 # Requirements
 
 - fusepy
+- oauthlib
 - requests
 - requests-oauthlib
 
