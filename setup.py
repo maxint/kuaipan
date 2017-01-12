@@ -25,7 +25,7 @@ setup(name='kpfuse',
               'kpfs=kpfuse.launch:main',
           ]
       },
-      install_requires=['fusepy', 'oauthlib', 'requests', 'requests-oauthlib'],
+      install_requires=['fusepy', 'oauthlib', 'requests', 'requests-oauthlib', 'fs'],
       license=version['__license__'],
       platforms=['Linux'],
       classifiers=[
